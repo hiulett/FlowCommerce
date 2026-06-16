@@ -8,7 +8,8 @@ from backend.config import settings
 from backend.database import get_db, SessionLocal
 from backend.schemas import WhatsAppWebhookPayload
 from backend.redis_client import is_duplicate_message
-from backend.models import Tenant
+from backend.models import Tenant, Message
+from backend.agent import run_conversational_agent
 from backend.whatsapp_service import (
     get_or_create_customer,
     get_or_create_conversation,
@@ -108,9 +109,26 @@ async def process_whatsapp_event(payload: WhatsAppWebhookPayload):
                     
                     save_incoming_message(db, conversation.id, content, msg_type)
                     
-                    # MOCK IA RESPUESTA (Hito 2 integrará RAG & Gemini)
-                    # Envía eco de vuelta o mensaje de prueba
-                    reply_text = f"Hola {profile_name or 'Cliente'}. He recibido tu mensaje: '{content}'. FlowCommerce IA está inicializándose."
+                    # Ejecutar Agente de IA Conversacional real
+                    reply_text = await run_conversational_agent(
+                        db=db,
+                        tenant=tenant,
+                        conversation=conversation,
+                        customer_id=customer.id,
+                        user_message=content
+                    )
+                    
+                    # Guardar respuesta del asistente en BD
+                    message_assistant = Message(
+                        conversation_id=conversation.id,
+                        sender="ASSISTANT",
+                        message_type="TEXT",
+                        content=reply_text
+                    )
+                    db.add(message_assistant)
+                    db.commit()
+                    
+                    # Enviar mensaje oficial al WhatsApp
                     await send_whatsapp_message(
                         phone_id=tenant.whatsapp_phone_id,
                         access_token=tenant.whatsapp_access_token,

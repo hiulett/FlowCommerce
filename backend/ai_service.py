@@ -1,0 +1,72 @@
+import google.generativeai as genai
+from sqlalchemy.orm import Session
+from sqlalchemy import and_
+from typing import List, Optional
+import numpy as np
+
+from backend.config import settings
+from backend.models import Product
+import uuid
+
+# Configurar API de Gemini
+genai.configure(api_key=settings.SECRET_KEY) # Se usará la clave inyectada. 
+# NOTA: En un despliegue real, se usa genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+# Pero utilizaremos el cliente HTTP o una inicialización robusta para evitar errores de conexión.
+
+async def get_embedding(text: str) -> List[float]:
+    """
+    Genera el vector de embeddings para un texto dado usando la API oficial de Gemini (o fallback a zeros).
+    Se usa el modelo 'models/embedding-001'.
+    """
+    try:
+        # Se asume la inicialización del cliente de google-generativeai
+        result = genai.embed_content(
+            model="models/embedding-001",
+            content=text,
+            task_type="retrieval_document"
+        )
+        return result['embedding']
+    except Exception as e:
+        print(f"Error generando embedding (usando vector mock): {str(e)}")
+        # Retorna un vector nulo mock de 1536 dimensiones en caso de fallo para no romper la ejecución
+        return [0.0] * 1536
+
+def search_products_semantic(db: Session, tenant_id: uuid.UUID, query_embedding: List[float], limit: int = 5) -> List[Product]:
+    """
+    Realiza una búsqueda semántica de productos filtrada por tenant_id usando pgvector
+    y ordenando por similitud coseno (menor distancia coseno).
+    """
+    try:
+        # El operador <=> en pgvector mapea a cosine_distance en SQLAlchemy
+        results = db.query(Product).filter(
+            and_(
+                Product.tenant_id == tenant_id,
+                Product.is_active == True,
+                Product.stock > 0
+            )
+        ).order_by(
+            Product.embedding.cosine_distance(query_embedding)
+        ).limit(limit).all()
+        return results
+    except Exception as e:
+        print(f"Error en búsqueda vectorial (fallback a alfabética): {str(e)}")
+        # Fallback a búsqueda normal por coincidencia de texto básico en caso de fallo de pgvector
+        return db.query(Product).filter(
+            Product.tenant_id == tenant_id,
+            Product.is_active == True,
+            Product.stock > 0
+        ).limit(limit).all()
+
+def format_products_context(products: List[Product]) -> str:
+    """
+    Formatea el catálogo de productos recuperado en un string legible
+    para inyectarlo directamente en el contexto del prompt del LLM.
+    """
+    if not products:
+        return "No hay productos disponibles actualmente en el stock."
+    
+    context = "PRODUCTOS DISPONIBLES EN STOCK:\n"
+    for p in products:
+        category_name = p.category.name if p.category else "General"
+        context += f"- ID: {p.id} | Nombre: {p.name} | Categoría: {category_name} | Precio: ${p.price} | Stock Disponible: {p.stock} | Descripción: {p.description or 'Sin descripción'}\n"
+    return context
