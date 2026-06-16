@@ -38,6 +38,40 @@ La gestión de pedidos transaccionales conversacionales se rige por una máquina
 *   **Liberación de Stock por Inactividad (Ttl de Pago):** Si un pedido permanece en estado `PENDING_PAYMENT` por más de **30 minutos** sin recibir el webhook de pago exitoso de la pasarela, una tarea programada del backend (cron job) cancela el pedido de forma automática y restaura los ítems al stock disponible del comercio.
 *   **Validación Horaria:** La IA rechaza iniciar el flujo de pedidos si la hora actual del servidor se encuentra fuera del rango de atención configurado por el comercio en la tabla `tenants`.
 
+### 11.3 Kitchen Display System (KDS) & Reglas de Tiempo de Espera
+
+El **Monitor de Órdenes (KDS)** en la consola web y tablets operativas actúa como un centro de control visual de alta velocidad para la cocina y despacho. Se rige por las siguientes reglas de alerta temporal:
+
+1.  **Estados del Tablero (Interfaz Kanban):**
+    *   **Nuevos (Column 1):** Órdenes recién pagadas o aprobadas. Tarjetas con color de fondo neutro (blanco/gris suave).
+    *   **En Preparación (Column 2):** Órdenes en producción activa. El contador de tiempo transcurrido inicia al pasar el pedido a esta columna.
+    *   **Listos (Column 3):** Órdenes completadas esperando recogida por el cliente o asignación de repartidor.
+2.  **Umbrales y Alertas Visuales de Urgencia (Configurables por Tenant):**
+    *   *Alerta Verde (Normal):* Tiempo transcurrido < 15 minutos.
+    *   *Alerta Amarilla (Advertencia):* Tiempo transcurrido entre 15 y 25 minutos. La tarjeta muestra un borde amarillo parpadeante y el contador de tiempo cambia a color naranja.
+    *   *Alerta Roja (Crítico):* Tiempo transcurrido > 25 minutos. La tarjeta se tiñe de color rojo suave de fondo, emite un aviso sonoro intermitente en la consola y se posiciona de forma prioritaria en la parte superior del tablero.
+3.  **Acciones Rápidas (Un solo Clic):**
+    *   Las tarjetas cuentan con botones táctiles sobredimensionados (ej. `[Iniciar Preparación]`, `[Marcar como Listo]`) para actualizar de forma inmediata el estado en la base de datos mediante WebSockets, evitando el uso de menús desplegables complejos.
+
+---
+
+### 11.4 Flujo de Notificaciones del Cliente Final (WhatsApp)
+
+Para cerrar el ciclo de compra y mantener al cliente final informado sin requerir su intervención en el chat, cada transición de estado en el KDS dispara de forma automatizada notificaciones push a su WhatsApp utilizando plantillas oficiales aprobadas por Meta:
+
+```
+  KDS: Pedido Aprobado (Nuevos)       -> WhatsApp: "Tu pedido #1042 ha sido recibido con éxito."
+  KDS: Inicia Preparación (En Prep)  -> WhatsApp: "Tu orden ya está en la cocina siendo preparada."
+  KDS: Marcado como Listo (Listos)    -> WhatsApp: "¡Tu pedido está listo! Va en camino con el repartidor."
+```
+
+1.  **Evento `PREPARING` (Entrada en Preparación):**
+    *   *Mensaje:* *"¡Buenas noticias, {{1}}! Tu pedido en {{2}} ya está en la cocina. Te avisaremos en cuanto esté en camino. 🍳"*
+2.  **Evento `SHIPPED` (Despachado / En camino):**
+    *   *Mensaje:* *"¡Tu pedido está listo y va en camino! 🛵 El repartidor {{1}} se dirige a tu ubicación. Sigue la ruta en tiempo real aquí: {{2}}"*
+3.  **Evento `DELIVERED` (Entregado):**
+    *   *Mensaje:* *"¡Entregado! Esperamos que disfrutes de tu compra. Ayúdanos a mejorar calificando tu experiencia aquí: {{1}} ⭐"*
+
 ---
 
 ## FASE 12 – SISTEMA DE PAGOS (INTEGRACIÓN Y SEGURIDAD)

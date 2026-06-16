@@ -74,6 +74,23 @@ A continuación se detallan las historias de usuario clave para los diferentes r
 
 ---
 
+### 16.5 Operador de Despacho (Tablero Kanban Tactil KDS)
+
+#### Historia de Usuario: Monitoreo de Urgencia en KDS
+*   **Como** Operador de Despacho,
+    **quiero** visualizar alertas de colores y cronómetros de tiempo en las tarjetas Kanban,
+    **para** priorizar de inmediato los pedidos más antiguos y evitar retrasos en las entregas.
+*   **Prioridad:** Alta.
+*   **Complejidad:** S (Pequeña).
+*   **Criterio de Aceptación (Gherkin):**
+    ```gherkin
+    Dado que estoy visualizando el Monitor de Órdenes KDS,
+    Cuando un pedido en preparación alcanza los 15 minutos de espera sin ser despachado,
+    Entonces la tarjeta correspondiente debe cambiar su color de tiempo a naranja e iniciar un borde parpadeante de alerta amarilla.
+    ```
+
+---
+
 ## FASE 17 – REQUERIMIENTOS FORMALES DEL SISTEMA
 
 ### 17.1 Requerimientos Funcionales (RF)
@@ -95,6 +112,8 @@ A continuación se detallan las historias de usuario clave para los diferentes r
 | **RF-13** | Transferencia Humana | El operador debe poder desactivar temporalmente la IA de un chat desde la consola web para interactuar de forma manual con el cliente. |
 | **RF-14** | Encriptación | El sistema debe encriptar de forma simétrica (AES-256) todos los tokens y credenciales de APIs de terceros en la base de datos. |
 | **RF-15** | Control de Auditoría| Cada cambio de configuración financiera, eliminación de productos o reembolsos debe registrarse en la tabla de logs de auditoría. |
+| **RF-16** | Alertas Visuales KDS | El Monitor de Órdenes debe activar alarmas visuales (cambios de color) y sonoras en la interfaz cuando los pedidos excedan el tiempo límite establecido. |
+| **RF-17** | Tránsito KDS Un Clic | El Monitor KDS debe permitir actualizar el estado del pedido a través de botones táctiles sobredimensionados de acción rápida. |
 
 ---
 

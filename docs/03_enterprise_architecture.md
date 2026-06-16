@@ -155,3 +155,28 @@ CREATE POLICY tenant_isolation_policy ON orders
     USING (tenant_id = current_setting('app.current_tenant_id'));
 ```
 En el backend, cada conexión a la base de datos establece la variable de configuración de sesión `app.current_tenant_id` con el valor del tenant correspondiente extraído del request de FastAPI, asegurando aislamiento absoluto a nivel de datos.
+
+---
+
+### 6.5 Arquitectura de Tiempo Real (Flujo de Sincronización KDS)
+
+La interfaz KDS del Monitor de Órdenes requiere una sincronización de datos con latencia menor a 1 segundo. El flujo de eventos arquitectónicos se estructura de la siguiente manera:
+
+```
+  Meta API Webhook  --->  FastAPI Backend  --->  PostgreSQL RLS
+                                |
+                                v (Publish)
+                           Redis Pub/Sub
+                                |
+                                v (Broadcast)
+                          WebSocket Server
+                                |
+                                v (Render card)
+                        Consola Web (KDS)
+```
+
+1.  **Recepción:** El webhook de WhatsApp o la pasarela de pagos notifica un pedido al backend.
+2.  **Publicación (Event Bus):** El módulo `OrderContext` guarda la orden en base de datos y publica un evento `OrderAwaitingPreparation` en el canal Redis Pub/Sub del tenant.
+3.  **Broadcast de WebSocket:** El servidor de WebSockets de FastAPI, que mantiene conexiones activas con las instancias del Monitor KDS abiertas en tablets/PCs de la cocina, recibe el mensaje de Redis y hace un broadcast del evento de forma asíncrona a todos los dispositivos suscritos del tenant.
+4.  **Actualización de UI:** El cliente React recibe el payload del pedido y añade la tarjeta KDS dinámicamente con animaciones suaves de transición, sin requerir refresco de página.
+
