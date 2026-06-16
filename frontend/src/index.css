@@ -1,73 +1,193 @@
+/* Nexus Core Design System - Vanilla CSS Implementation */
+
 :root {
-  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
   line-height: 1.5;
   font-weight: 400;
 
-  color-scheme: light dark;
+  color-scheme: light;
   color: #1b1b21;
   background-color: #fcf8ff;
-
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
 }
 
 body {
   margin: 0;
-  display: flex;
-  min-width: 320px;
-  min-height: 100vh;
+  padding: 0;
+  box-sizing: border-box;
 }
 
-#root {
-  width: 100%;
-}
+/* Tailwind-like utility classes mapped to CSS properties */
+.flex { display: flex; }
+.flex-col { flex-direction: column; }
+.flex-1 { flex: 1 1 0%; }
+.min-h-screen { min-height: 100vh; }
+.overflow-y-auto { overflow-y: auto; }
+.w-full { width: 100%; }
+.w-72 { width: 18rem; }
+.h-full { height: 100%; }
 
-.admin-container {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
+/* Sidebar Navigation */
+aside {
+  background-color: #1a146b;
+  color: #ffffff;
 }
-
-.admin-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  border-bottom: 1px solid #e2e8f0;
-  padding-bottom: 1rem;
-  margin-bottom: 2rem;
+aside button {
+  background: transparent;
+  border: none;
+  color: #c3c0ff;
+  text-align: left;
+  cursor: pointer;
+  outline: none;
 }
-
-.admin-header h1 {
-  color: #1a146b;
-  margin: 0;
-  font-size: 2rem;
+aside button:hover {
+  background-color: rgba(49, 46, 129, 0.5);
+  color: #ffffff;
 }
-
-.badge {
+aside button.bg-\[\#312e81\] {
   background-color: #312e81;
-  color: white;
-  padding: 0.25rem 0.75rem;
+  color: #ffffff;
+  border-left: 4px solid #3b82f6;
+}
+
+/* KDS Columns Layout */
+.grid-cols-1 { display: grid; grid-template-columns: repeat(1, minmax(0, 1fr)); }
+@media (min-width: 768px) {
+  .md\:grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .md\:grid-cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .md\:grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+.gap-6 { gap: 1.5rem; }
+.gap-4 { gap: 1rem; }
+.gap-3 { gap: 0.75rem; }
+.gap-2 { gap: 0.5rem; }
+.p-8 { padding: 2rem; }
+.p-6 { padding: 1.5rem; }
+.p-5 { padding: 1.25rem; }
+.p-4 { padding: 1rem; }
+.px-8 { padding-left: 2rem; padding-right: 2rem; }
+.py-4 { padding-top: 1rem; padding-bottom: 1rem; }
+.py-3.5 { padding-top: 0.875rem; padding-bottom: 0.875rem; }
+.pb-2 { padding-bottom: 0.5rem; }
+.mt-1 { margin-top: 0.25rem; }
+.mb-4 { margin-bottom: 1rem; }
+
+/* KDS Kanban Styles */
+.bg-\[\#f0ecf4\] {
+  background-color: #f0ecf4;
+}
+.border-\[\#c8c5d3\]\/40 {
+  border: 1px solid rgba(200, 197, 211, 0.4);
+}
+.rounded-xl {
+  border-radius: 0.75rem;
+}
+.rounded-lg {
+  border-radius: 0.5rem;
+}
+.rounded-full {
   border-radius: 9999px;
-  font-size: 0.875rem;
-  font-weight: 600;
 }
 
-.admin-content {
-  display: grid;
-  gap: 1.5rem;
+/* Tablas y Catálogos */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 1rem;
+}
+th, td {
+  padding: 1rem;
+  border-bottom: 1px solid #e2e8f0;
+}
+th {
+  background-color: #f8fafc;
+  color: #474551;
+  font-weight: 700;
+}
+tr:hover {
+  background-color: #f8fafc;
 }
 
-.card {
-  background: white;
+/* Alertas de urgencia del KDS */
+.border-\[\#ba1a1a\] {
+  border: 2px solid #ba1a1a !important;
+}
+.bg-\[\#ffdad6\] {
+  background-color: #ffdad6 !important;
+}
+.text-white {
+  color: #ffffff !important;
+}
+.bg-\[\#ba1a1a\] {
+  background-color: #ba1a1a !important;
+}
+
+.border-amber-400 {
+  border: 2px solid #fbbf24 !important;
+}
+.bg-amber-50\/50 {
+  background-color: rgba(254, 243, 199, 0.5) !important;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .7; }
+}
+.animate-pulse {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Botones y UI interactiva */
+button {
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+button:active {
+  transform: scale(0.97);
+}
+
+.bg-\[\#3b82f6\] { background-color: #3b82f6; }
+.bg-\[\#10B981\] { background-color: #10b981; }
+.bg-\[\#1a146b\] { background-color: #1a146b; }
+.hover\:bg-\[\#0058be\]:hover { background-color: #0058be; }
+.hover\:bg-\[\#059669\]:hover { background-color: #059669; }
+.hover\:bg-\[\#312e81\]:hover { background-color: #312e81; }
+
+.font-extrabold { font-weight: 800; }
+.font-bold { font-weight: 700; }
+.font-semibold { font-weight: 600; }
+.text-sm { font-size: 0.875rem; }
+.text-xs { font-size: 0.75rem; }
+.text-xl { font-size: 1.25rem; }
+.text-2xl { font-size: 1.5rem; }
+.text-center { text-align: center; }
+.text-right { text-align: right; }
+.uppercase { text-transform: uppercase; }
+.shadow-sm { box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05); }
+.border { border: 1px solid #e2e8f0; }
+
+.text-\[\#1a146b\] { color: #1a146b; }
+.text-\[\#3b82f6\] { color: #3b82f6; }
+.text-\[\#474651\] { color: #474651; }
+
+/* Dashboard Chart simulator */
+.h-64 { height: 16rem; }
+.items-end { align-items: flex-end; }
+.border-b { border-bottom: 1px solid #e2e8f0; }
+.border-l { border-left: 1px solid #e2e8f0; }
+.w-4 { width: 1rem; }
+.bg-slate-100 { background-color: #f1f5f9; }
+.h-2\.5 { height: 0.625rem; }
+.overflow-hidden { overflow: hidden; }
+
+/* Textarea & Inputs */
+input, textarea {
   border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  padding: 1.5rem;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  padding: 0.75rem;
+  font-family: inherit;
+  font-size: 0.875rem;
 }
-
-.card h3 {
-  margin-top: 0;
-  color: #312e81;
+input:focus, textarea:focus {
+  border-color: #3b82f6;
+  outline: none;
 }
