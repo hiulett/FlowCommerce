@@ -1,3 +1,4 @@
+const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -828,7 +829,7 @@ function QuickActionsDropdown({ onClose, showToast, onTrain, onBroadcast }: { on
 
   useEffect(() => {
     // Cargar estado inicial de ia_paused desde el backend
-    fetch('http://localhost:8000/api/tenant/settings', {
+    fetch(API_BASE_URL + '/api/tenant/settings', {
       headers: { 'X-Tenant-ID': '40446806-0107-6201-9310-c9943efb3870' }
     })
       .then(res => res.json())
@@ -841,7 +842,7 @@ function QuickActionsDropdown({ onClose, showToast, onTrain, onBroadcast }: { on
   const testApi = async () => {
     setCheckingApi(true);
     try {
-      const res = await fetch('http://localhost:8000/api/tenant/settings/test-meta', {
+      const res = await fetch(API_BASE_URL + '/api/tenant/settings/test-meta', {
         method: 'POST',
         headers: { 'X-Tenant-ID': '40446806-0107-6201-9310-c9943efb3870' }
       });
@@ -860,7 +861,7 @@ function QuickActionsDropdown({ onClose, showToast, onTrain, onBroadcast }: { on
 
   const toggleIa = async () => {
     try {
-      const res = await fetch('http://localhost:8000/api/tenant/settings/toggle-ai', {
+      const res = await fetch(API_BASE_URL + '/api/tenant/settings/toggle-ai', {
         method: 'POST',
         headers: { 'X-Tenant-ID': '40446806-0107-6201-9310-c9943efb3870' }
       });
@@ -962,7 +963,7 @@ function BroadcastModal({ onClose, showToast }: { onClose:()=>void; showToast:(m
     setProgress(10);
     
     try {
-      const res = await fetch('http://localhost:8000/api/tenant/broadcast', {
+      const res = await fetch(API_BASE_URL + '/api/tenant/broadcast', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1419,7 +1420,7 @@ function AIKnowledgeView({ showToast, searchQuery }: { showToast:(m:string,t?:To
 
   useEffect(() => {
     // Fetch documents
-    fetch('http://localhost:8000/api/tenant/documents', {
+    fetch(API_BASE_URL + '/api/tenant/documents', {
       headers: { 'X-Tenant-ID': '40446806-0107-6201-9310-c9943efb3870' }
     })
       .then(res => res.json())
@@ -1438,7 +1439,7 @@ function AIKnowledgeView({ showToast, searchQuery }: { showToast:(m:string,t?:To
       .catch(err => console.error("Error fetching docs:", err));
 
     // Fetch prompt
-    fetch('http://localhost:8000/api/tenant/settings', {
+    fetch(API_BASE_URL + '/api/tenant/settings', {
       headers: { 'X-Tenant-ID': '40446806-0107-6201-9310-c9943efb3870' }
     })
       .then(res => res.json())
@@ -1451,7 +1452,7 @@ function AIKnowledgeView({ showToast, searchQuery }: { showToast:(m:string,t?:To
   }, []);
 
   const handleSavePrompt = () => {
-    fetch('http://localhost:8000/api/tenant/settings', {
+    fetch(API_BASE_URL + '/api/tenant/settings', {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
@@ -1468,7 +1469,7 @@ function AIKnowledgeView({ showToast, searchQuery }: { showToast:(m:string,t?:To
 
   const handleSaveDoc = (data: Partial<KBDocument>) => {
     if (modal === 'edit' && selected) {
-      fetch(`http://localhost:8000/api/tenant/documents/${selected.id}`, {
+      fetch(`${API_BASE_URL}/api/tenant/documents/${selected.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -1494,7 +1495,7 @@ function AIKnowledgeView({ showToast, searchQuery }: { showToast:(m:string,t?:To
         })
         .catch(err => console.error("Error updating doc:", err));
     } else {
-      fetch('http://localhost:8000/api/tenant/documents', {
+      fetch(API_BASE_URL + '/api/tenant/documents', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1527,7 +1528,7 @@ function AIKnowledgeView({ showToast, searchQuery }: { showToast:(m:string,t?:To
 
   const handleDeleteDoc = () => {
     if (!selected) return;
-    fetch(`http://localhost:8000/api/tenant/documents/${selected.id}`, {
+    fetch(`${API_BASE_URL}/api/tenant/documents/${selected.id}`, {
       method: 'DELETE',
       headers: { 'X-Tenant-ID': '40446806-0107-6201-9310-c9943efb3870' }
     })
@@ -1540,7 +1541,7 @@ function AIKnowledgeView({ showToast, searchQuery }: { showToast:(m:string,t?:To
   };
 
   const handleTrainModel = () => {
-    fetch('http://localhost:8000/api/tenant/documents/train', {
+    fetch(API_BASE_URL + '/api/tenant/documents/train', {
       method: 'POST',
       headers: { 'X-Tenant-ID': '40446806-0107-6201-9310-c9943efb3870' }
     })
@@ -1762,7 +1763,7 @@ function CustomersView({ showToast }: { showToast:(m:string,t?:ToastMsg['type'])
   const [selected,setSelected]=useState<Customer|null>(null);
 
   useEffect(() => {
-    fetch('http://localhost:8000/api/tenant/customers', {
+    fetch(API_BASE_URL + '/api/tenant/customers', {
       headers: { 'X-Tenant-ID': '40446806-0107-6201-9310-c9943efb3870' }
     })
       .then(res => res.json())
@@ -1847,7 +1848,7 @@ function SettingsView({ showToast }: { showToast:(m:string,t?:ToastMsg['type'])=
   const [waCfg,setWaCfg]=useState({phoneId:'109283746501928',verifyToken:'flowcommerce_wh_2026',accessToken:'EAAGb37...z9P2kd8s',webhookUrl:'https://api.flowcommerce.io/webhooks/whatsapp'});
 
   useEffect(() => {
-    fetch('http://localhost:8000/api/tenant/settings', {
+    fetch(API_BASE_URL + '/api/tenant/settings', {
       headers: { 'X-Tenant-ID': '40446806-0107-6201-9310-c9943efb3870' }
     })
       .then(res => res.json())
@@ -1862,7 +1863,7 @@ function SettingsView({ showToast }: { showToast:(m:string,t?:ToastMsg['type'])=
   }, []);
 
   const handleSaveWaSettings = () => {
-    fetch('http://localhost:8000/api/tenant/settings', {
+    fetch(API_BASE_URL + '/api/tenant/settings', {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
@@ -2409,7 +2410,7 @@ export default function App({ user, onLogout }: { user:{name:string;email:string
     if (user.role !== 'SUPER_ADMIN') return;
     
     // Fetch tenants
-    fetch('http://localhost:8000/api/super/tenants')
+    fetch(API_BASE_URL + '/api/super/tenants')
       .then(res => res.json())
       .then(data => {
         const mapped = data.map((t: any) => ({
@@ -2428,7 +2429,7 @@ export default function App({ user, onLogout }: { user:{name:string;email:string
       .catch(err => console.error("Error fetching tenants:", err));
 
     // Fetch plans
-    fetch('http://localhost:8000/api/super/plans')
+    fetch(API_BASE_URL + '/api/super/plans')
       .then(res => res.json())
       .then(data => {
         const mapped = data.map((p: any) => ({
@@ -2443,7 +2444,7 @@ export default function App({ user, onLogout }: { user:{name:string;email:string
       .catch(err => console.error("Error fetching plans:", err));
 
     // Fetch billing
-    fetch('http://localhost:8000/api/super/billing')
+    fetch(API_BASE_URL + '/api/super/billing')
       .then(res => res.json())
       .then(data => {
         const mapped = data.map((l: any) => ({
@@ -2467,7 +2468,7 @@ export default function App({ user, onLogout }: { user:{name:string;email:string
     if (d.plan !== undefined) body.plan = d.plan;
     if (d.status !== undefined) body.status = d.status;
 
-    fetch(`http://localhost:8000/api/super/tenants/${id}`, {
+    fetch(`${API_BASE_URL}/api/super/tenants/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body)
@@ -2489,7 +2490,7 @@ export default function App({ user, onLogout }: { user:{name:string;email:string
   };
 
   const handleUpdatePlan = (key: string, data: Partial<PlatformPlan>) => {
-    fetch(`http://localhost:8000/api/super/plans/${key}`, {
+    fetch(`${API_BASE_URL}/api/super/plans/${key}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -2510,7 +2511,7 @@ export default function App({ user, onLogout }: { user:{name:string;email:string
 
   const handleUpdateLog = (id: string, data: Partial<FinancialLog>) => {
     if (data.status === 'REFUNDED') {
-      fetch(`http://localhost:8000/api/super/billing/${id}/refund`, {
+      fetch(`${API_BASE_URL}/api/super/billing/${id}/refund`, {
         method: 'PUT'
       })
         .then(res => res.json())
@@ -2537,7 +2538,7 @@ export default function App({ user, onLogout }: { user:{name:string;email:string
 
   useEffect(() => {
     if (user.role === 'SUPER_ADMIN') return;
-    fetch('http://localhost:8000/api/tenant/orders', {
+    fetch(API_BASE_URL + '/api/tenant/orders', {
       headers: { 'X-Tenant-ID': '40446806-0107-6201-9310-c9943efb3870' }
     })
       .then(res => res.json())
@@ -2570,7 +2571,7 @@ export default function App({ user, onLogout }: { user:{name:string;email:string
   },[showToast, user.role]);
 
   const handleStartPreparing = (id: string) => {
-    fetch(`http://localhost:8000/api/tenant/orders/${id}/status`, {
+    fetch(`${API_BASE_URL}/api/tenant/orders/${id}/status`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
@@ -2586,7 +2587,7 @@ export default function App({ user, onLogout }: { user:{name:string;email:string
   };
 
   const handleMarkReady = (id: string) => {
-    fetch(`http://localhost:8000/api/tenant/orders/${id}/status`, {
+    fetch(`${API_BASE_URL}/api/tenant/orders/${id}/status`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
@@ -2602,7 +2603,7 @@ export default function App({ user, onLogout }: { user:{name:string;email:string
   };
 
   const handleDeliver = (id: string) => {
-    fetch(`http://localhost:8000/api/tenant/orders/${id}/status`, {
+    fetch(`${API_BASE_URL}/api/tenant/orders/${id}/status`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
@@ -2777,7 +2778,7 @@ export default function App({ user, onLogout }: { user:{name:string;email:string
       {modal==='help-center'&&<HelpCenterModal onClose={()=>setModal(null)} showToast={showToast}/>}
       {modal==='notification-settings'&&<NotificationSettingsModal onClose={()=>setModal(null)} showToast={showToast}/>}
       {modal==='train-model'&&<TrainModelModal onClose={()=>setModal(null)} showToast={(m, t)=>{
-        fetch('http://localhost:8000/api/tenant/documents/train', {
+        fetch(API_BASE_URL + '/api/tenant/documents/train', {
           method: 'POST',
           headers: { 'X-Tenant-ID': '40446806-0107-6201-9310-c9943efb3870' }
         })
