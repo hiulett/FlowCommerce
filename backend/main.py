@@ -1,4 +1,5 @@
-from fastapi import FastAPI, Depends, HTTPException, status, Request, BackgroundTasks
+from fastapi import FastAPI, Depends, HTTPException, status, Request, BackgroundTasks, Query
+from fastapi.responses import PlainTextResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import text
@@ -41,12 +42,12 @@ def read_root():
     }
 
 # Endpoint de verificación requerido por Meta (WhatsApp API Setup)
-@app.get("/webhooks/whatsapp")
+@app.get("/webhooks/whatsapp", response_class=PlainTextResponse)
 def verify_webhook(
     request: Request,
-    hub_mode: str = None, 
-    hub_challenge: int = None, 
-    hub_verify_token: str = None
+    hub_mode: str = Query(None, alias="hub.mode"), 
+    hub_challenge: str = Query(None, alias="hub.challenge"), 
+    hub_verify_token: str = Query(None, alias="hub.verify_token")
 ):
     if hub_mode == "subscribe" and hub_verify_token == settings.WHATSAPP_VERIFY_TOKEN:
         return hub_challenge
