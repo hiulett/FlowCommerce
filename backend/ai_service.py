@@ -21,11 +21,14 @@ async def get_embedding(text: str) -> List[float]:
     try:
         # Se asume la inicialización del cliente de google-generativeai
         result = genai.embed_content(
-            model="models/embedding-001",
+            model="models/gemini-embedding-001",
             content=text,
             task_type="retrieval_document"
         )
-        return result['embedding']
+        emb = result['embedding']
+        if len(emb) < 1536:
+            emb = emb + [0.0] * (1536 - len(emb))
+        return emb
     except Exception as e:
         print(f"Error generando embedding (usando vector mock): {str(e)}")
         # Retorna un vector nulo mock de 1536 dimensiones en caso de fallo para no romper la ejecución

@@ -65,7 +65,7 @@ async def run_conversational_agent(
     try:
         # Inicializar modelo con herramientas
         model = genai.GenerativeModel(
-            model_name="gemini-1.5-flash",
+            model_name="gemini-2.0-flash",
             tools=tools_definitions,
             system_instruction=system_prompt
         )
