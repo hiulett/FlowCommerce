@@ -70,7 +70,11 @@ async def process_whatsapp_event(payload: WhatsAppWebhookPayload):
                 phone_id = value.metadata.get("phone_number_id")
                 
                 # Buscar el Tenant correspondiente
-                tenant = db.query(Tenant).filter(Tenant.whatsapp_phone_id == phone_id).first()
+                tenant = None
+                if settings.WHATSAPP_PHONE_ID and phone_id == settings.WHATSAPP_PHONE_ID:
+                    tenant = db.query(Tenant).filter(Tenant.id == uuid.UUID("40446806-0107-6201-9310-c9943efb3870")).first()
+                if not tenant:
+                    tenant = db.query(Tenant).filter(Tenant.whatsapp_phone_id == phone_id).first()
                 if not tenant:
                     print(f"Tenant no encontrado para phone_id: {phone_id}")
                     continue
@@ -135,8 +139,8 @@ async def process_whatsapp_event(payload: WhatsAppWebhookPayload):
                     
                     # Enviar mensaje oficial al WhatsApp
                     await send_whatsapp_message(
-                        phone_id=tenant.whatsapp_phone_id,
-                        access_token=tenant.whatsapp_access_token,
+                        phone_id=settings.WHATSAPP_PHONE_ID or tenant.whatsapp_phone_id,
+                        access_token=settings.WHATSAPP_ACCESS_TOKEN or tenant.whatsapp_access_token,
                         to=sender_phone,
                         text=reply_text
                     )
@@ -287,7 +291,9 @@ def test_meta_api(db: Session = Depends(get_tenant_db)):
     tenant = db.query(Tenant).first()
     if not tenant:
         raise HTTPException(status_code=404, detail="Tenant context not found")
-    if not tenant.whatsapp_phone_id or not tenant.whatsapp_access_token:
+    phone_id = settings.WHATSAPP_PHONE_ID or tenant.whatsapp_phone_id
+    access_token = settings.WHATSAPP_ACCESS_TOKEN or tenant.whatsapp_access_token
+    if not phone_id or not access_token:
         raise HTTPException(
             status_code=400,
             detail="No se han configurado las credenciales de WhatsApp Business API."
@@ -298,8 +304,8 @@ def test_meta_api(db: Session = Depends(get_tenant_db)):
     from backend.config import settings
     
     start_time = time.time()
-    url = f"https://graph.facebook.com/{settings.META_API_VERSION}/{tenant.whatsapp_phone_id}"
-    params = {"access_token": tenant.whatsapp_access_token}
+    url = f"https://graph.facebook.com/{settings.META_API_VERSION}/{phone_id}"
+    params = {"access_token": access_token}
     
     try:
         response = requests.get(url, params=params, timeout=10)
@@ -311,7 +317,7 @@ def test_meta_api(db: Session = Depends(get_tenant_db)):
             return {
                 "status": "success",
                 "latency_ms": latency_ms,
-                "phone_id": tenant.whatsapp_phone_id,
+                "phone_id": phone_id,
                 "message": f"Conexión exitosa con Meta Cloud API. Número registrado: {phone_num}"
             }
         else:
