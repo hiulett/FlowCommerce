@@ -9,7 +9,7 @@ from backend.models import Product
 import uuid
 
 # Configurar API de Gemini
-genai.configure(api_key=settings.SECRET_KEY) # Se usará la clave inyectada. 
+genai.configure(api_key=settings.GEMINI_API_KEY or settings.SECRET_KEY) # Se usará la clave inyectada. 
 # NOTA: En un despliegue real, se usa genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 # Pero utilizaremos el cliente HTTP o una inicialización robusta para evitar errores de conexión.
 

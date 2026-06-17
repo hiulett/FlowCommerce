@@ -12,6 +12,9 @@ class Settings(BaseSettings):
     WHATSAPP_VERIFY_TOKEN: str = "flowcommerce_token_123"
     META_API_VERSION: str = "v19.0"
     
+    # Gemini API
+    GEMINI_API_KEY: Optional[str] = None
+    
     # Seguridad
     SECRET_KEY: str = "super_secret_jwt_signing_key_change_me_in_production"
     ALGORITHM: str = "HS256"

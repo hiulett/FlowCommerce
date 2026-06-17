@@ -15,7 +15,7 @@ from backend.cart_service import (
 import uuid
 
 # Configurar API de Gemini
-genai.configure(api_key=settings.SECRET_KEY)
+genai.configure(api_key=settings.GEMINI_API_KEY or settings.SECRET_KEY)
 
 async def run_conversational_agent(
     db: Session,
