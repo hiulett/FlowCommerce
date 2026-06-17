@@ -292,15 +292,44 @@ def test_meta_api(db: Session = Depends(get_tenant_db)):
             status_code=400,
             detail="No se han configurado las credenciales de WhatsApp Business API."
         )
-    # Simular una pequeña latencia
+    
+    import requests
     import time
-    time.sleep(0.5)
-    return {
-        "status": "success",
-        "latency_ms": 38,
-        "phone_id": tenant.whatsapp_phone_id,
-        "message": "Conexión estable con la API de Meta."
-    }
+    from backend.config import settings
+    
+    start_time = time.time()
+    url = f"https://graph.facebook.com/{settings.META_API_VERSION}/{tenant.whatsapp_phone_id}"
+    params = {"access_token": tenant.whatsapp_access_token}
+    
+    try:
+        response = requests.get(url, params=params, timeout=10)
+        latency_ms = int((time.time() - start_time) * 1000)
+        
+        if response.status_code == 200:
+            data = response.json()
+            phone_num = data.get("display_phone_number", "Número de prueba")
+            return {
+                "status": "success",
+                "latency_ms": latency_ms,
+                "phone_id": tenant.whatsapp_phone_id,
+                "message": f"Conexión exitosa con Meta Cloud API. Número registrado: {phone_num}"
+            }
+        else:
+            try:
+                err_data = response.json()
+                err_msg = err_data.get("error", {}).get("message", "Error de credenciales en Meta API.")
+            except Exception:
+                err_msg = f"HTTP {response.status_code}"
+            
+            raise HTTPException(
+                status_code=400,
+                detail=f"Fallo de autenticación con Meta: {err_msg}"
+            )
+    except requests.RequestException as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error de red al conectar con Meta: {str(e)}"
+        )
 
 @app.post("/api/tenant/broadcast")
 def send_mass_broadcast(data: BroadcastPayload, db: Session = Depends(get_tenant_db)):
