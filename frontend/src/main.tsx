@@ -4,7 +4,7 @@ import App from './App'
 import Login from './Login'
 import './index.css'
 
-interface User { name: string; email: string; }
+interface User { name: string; email: string; role?: string; }
 
 function Root() {
   const [user, setUser] = useState<User | null>(() => {

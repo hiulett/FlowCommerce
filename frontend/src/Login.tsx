@@ -4,7 +4,7 @@ function MI({ name, style }: { name: string; style?: React.CSSProperties }) {
   return <span className="material-symbols-outlined" style={style}>{name}</span>;
 }
 
-interface Props { onLogin: (user: { name: string; email: string }) => void; }
+interface Props { onLogin: (user: { name: string; email: string; role?: string }) => void; }
 
 export default function Login({ onLogin }: Props) {
   const [email, setEmail]       = useState('');
@@ -27,7 +27,9 @@ export default function Login({ onLogin }: Props) {
       setLoading(true);
       await new Promise(r => setTimeout(r, 1200));
       if (email === 'admin@nexus.com' && password === 'admin123') {
-        onLogin({ name: 'Admin Principal', email });
+        onLogin({ name: 'Admin Principal', email, role: 'TENANT_ADMIN' });
+      } else if (email === 'superadmin@nexus.com' && password === 'admin123') {
+        onLogin({ name: 'Platform Super Admin', email, role: 'SUPER_ADMIN' });
       } else {
         setError('Credenciales incorrectas. Usa el acceso demo para continuar.');
         setLoading(false);
@@ -45,16 +47,20 @@ export default function Login({ onLogin }: Props) {
       setRegistered(true);
       setLoading(false);
       setTimeout(() => {
-        onLogin({ name, email });
+        onLogin({ name, email, role: 'TENANT_ADMIN' });
       }, 1500);
     }
   };
 
-  const handleDemo = async () => {
+  const handleDemo = async (type: 'tenant' | 'superadmin') => {
     setLoading(true);
     setError('');
     await new Promise(r => setTimeout(r, 800));
-    onLogin({ name: 'GC Corp', email: 'admin@nexus.com' });
+    if (type === 'superadmin') {
+      onLogin({ name: 'Platform Super Admin', email: 'superadmin@nexus.com', role: 'SUPER_ADMIN' });
+    } else {
+      onLogin({ name: 'GC Corp', email: 'admin@nexus.com', role: 'TENANT_ADMIN' });
+    }
   };
 
   return (
@@ -113,12 +119,17 @@ export default function Login({ onLogin }: Props) {
               <h1>Bienvenido de vuelta</h1>
               <p>Inicia sesión en tu consola de administración</p>
             </div>
-
             {/* Demo Access */}
-            <button className="login-demo-btn" onClick={handleDemo} disabled={loading}>
-              <MI name="bolt" style={{ fontSize: 18 }} />
-              {loading ? 'Entrando...' : 'Acceso Demo — Sin contraseña'}
-            </button>
+            <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
+              <button className="login-demo-btn" style={{ flex: 1, margin: 0 }} onClick={() => handleDemo('tenant')} disabled={loading}>
+                <MI name="bolt" style={{ fontSize: 18 }} />
+                {loading ? '...' : 'Demo Tenant'}
+              </button>
+              <button className="login-demo-btn" style={{ flex: 1, margin: 0, background: 'var(--color-primary-fixed-dim)', borderColor: 'var(--color-primary)' }} onClick={() => handleDemo('superadmin')} disabled={loading}>
+                <MI name="admin_panel_settings" style={{ fontSize: 18 }} />
+                {loading ? '...' : 'Demo Super Admin'}
+              </button>
+            </div>
 
             <div className="login-divider">o inicia sesión con email</div>
 
@@ -182,7 +193,7 @@ export default function Login({ onLogin }: Props) {
             </form>
 
             <div className="login-footer">
-              <p>Demo: <strong>admin@nexus.com</strong> / <strong>admin123</strong></p>
+              <p>Demo: <strong>admin@nexus.com</strong> (Tenant) o <strong>superadmin@nexus.com</strong> (Super Admin) / <strong>admin123</strong></p>
               <p style={{ marginTop: 8 }}>¿Nuevo en Nexus AI? <strong onClick={() => { setView('register'); setError(''); setRegistered(false); }} style={{ cursor: 'pointer', color: 'var(--color-secondary)' }}>Crear cuenta gratis</strong></p>
             </div>
           </div>

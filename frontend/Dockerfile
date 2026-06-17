@@ -1,13 +1,21 @@
-# Etapa de compilación
-FROM node:20-alpine AS builder
+# Stage 1: Build the React application
+FROM node:20-alpine as build-stage
+
 WORKDIR /app
-COPY package*.json ./
+
+COPY frontend/package*.json ./
 RUN npm install
-COPY . .
+
+COPY frontend/ ./
 RUN npm run build
 
-# Etapa de ejecución usando Nginx
+# Stage 2: Serve the application using Nginx
 FROM nginx:alpine
-COPY --from=builder /app/dist /usr/share/nginx/html
+
+COPY --from=build-stage /app/dist /usr/share/nginx/html
+
+COPY frontend/nginx.conf /etc/nginx/conf.d/default.conf
+
 EXPOSE 80
+
 CMD ["nginx", "-g", "daemon off;"]

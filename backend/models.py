@@ -14,7 +14,13 @@ class Tenant(Base):
     whatsapp_phone_id = Column(String(50), nullable=True)
     whatsapp_access_token = Column(Text, nullable=True)
     ai_system_prompt = Column(Text, nullable=True)
+    ai_paused = Column(Boolean, default=False)
     status = Column(String(20), default="ACTIVE") # ACTIVE, SUSPENDED
+    plan = Column(String(50), default="Starter") # Starter, Professional, Enterprise
+    owner_name = Column(String(100), nullable=True, default="GC Corp")
+    owner_email = Column(String(150), nullable=True, default="admin@nexus.com")
+    storage_used = Column(Integer, default=0) # MB
+    messages_count = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     users = relationship("User", back_populates="tenant", cascade="all, delete-orphan")
@@ -148,3 +154,37 @@ class AuditLog(Base):
     ip_address = Column(String(45), nullable=True)
     details = Column(JSON, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+class PlatformPlan(Base):
+    __tablename__ = "platform_plans"
+
+    key = Column(String(50), primary_key=True)
+    name = Column(String(50), nullable=False)
+    price = Column(Numeric(10, 2), nullable=False)
+    max_msgs = Column(Integer, default=5000)
+    max_agents = Column(Integer, default=2)
+
+class PlatformTransaction(Base):
+    __tablename__ = "platform_transactions"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="SET NULL"), nullable=True)
+    tenant_name = Column(String(100), nullable=False)
+    amount = Column(Numeric(10, 2), nullable=False)
+    status = Column(String(30), default="PAID") # PAID, FAILED, REFUNDED
+    date = Column(DateTime, default=datetime.utcnow)
+    gateway = Column(String(50), default="Stripe") # Stripe, WhatsApp Pay
+
+class KnowledgeDocument(Base):
+    __tablename__ = "knowledge_documents"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    title = Column(String(150), nullable=False)
+    type = Column(String(30), nullable=False) # FAQ, CATALOG, POLICY, PROMO
+    content = Column(Text, nullable=True)
+    word_count = Column(Integer, default=0)
+    status = Column(String(20), default="PENDING") # PENDING, TRAINED
+    last_updated = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
