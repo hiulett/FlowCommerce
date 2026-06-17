@@ -7,16 +7,27 @@ CREATE EXTENSION IF NOT EXISTS vector;
 
 -- 1. Habilitar RLS en las tablas críticas
 ALTER TABLE tenants ENABLE ROW LEVEL SECURITY;
+ALTER TABLE tenants FORCE ROW LEVEL SECURITY;
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE users FORCE ROW LEVEL SECURITY;
 ALTER TABLE customers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE customers FORCE ROW LEVEL SECURITY;
 ALTER TABLE categories ENABLE ROW LEVEL SECURITY;
+ALTER TABLE categories FORCE ROW LEVEL SECURITY;
 ALTER TABLE products ENABLE ROW LEVEL SECURITY;
+ALTER TABLE products FORCE ROW LEVEL SECURITY;
 ALTER TABLE orders ENABLE ROW LEVEL SECURITY;
+ALTER TABLE orders FORCE ROW LEVEL SECURITY;
 ALTER TABLE order_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE order_items FORCE ROW LEVEL SECURITY;
 ALTER TABLE payments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE payments FORCE ROW LEVEL SECURITY;
 ALTER TABLE conversations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE conversations FORCE ROW LEVEL SECURITY;
 ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE messages FORCE ROW LEVEL SECURITY;
 ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE audit_logs FORCE ROW LEVEL SECURITY;
 
 -- 2. Crear Políticas de Aislamiento de Tenants basadas en la variable de sesión 'app.current_tenant_id'
 -- NOTA: Las políticas usan la variable SET LOCAL app.current_tenant_id dentro de cada transacción.
@@ -86,6 +97,7 @@ CREATE POLICY tenant_isolation_audit_logs ON audit_logs
 
 -- Habilitar RLS en knowledge_documents
 ALTER TABLE knowledge_documents ENABLE ROW LEVEL SECURITY;
+ALTER TABLE knowledge_documents FORCE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS tenant_isolation_knowledge ON knowledge_documents;
 CREATE POLICY tenant_isolation_knowledge ON knowledge_documents
