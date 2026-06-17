@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Integer, Numeric, Boolean, DateTime, ForeignKey, Text, Decimal, JSON
+from sqlalchemy import Column, String, Integer, Numeric, Boolean, DateTime, ForeignKey, Text, JSON
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 import uuid
@@ -82,8 +82,8 @@ class Order(Base):
     status = Column(String(30), default="PENDING_PAYMENT") # PENDING_PAYMENT, PREPARING, SHIPPED, DELIVERED, CANCELLED
     total_amount = Column(Numeric(10, 2), nullable=False)
     shipping_address = Column(Text, nullable=True)
-    latitude = Column(Decimal(9, 6), nullable=True)
-    longitude = Column(Decimal(9, 6), nullable=True)
+    latitude = Column(Numeric(9, 6), nullable=True)
+    longitude = Column(Numeric(9, 6), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     tenant = relationship("Tenant", back_populates="orders")

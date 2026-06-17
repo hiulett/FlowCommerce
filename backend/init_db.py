@@ -7,10 +7,24 @@ import uuid
 def init_database():
     """
     Inicializa físicamente la base de datos en el contenedor PostgreSQL local:
-    1. Crea todas las tablas mediante SQLAlchemy.
-    2. Ejecuta el script backend/init_db.sql para configurar RLS y pgvector.
-    3. Inserte datos mock iniciales (Tenant de pruebas y Usuario admin).
+    1. Crea las extensiones requeridas en la base de datos.
+    2. Crea todas las tablas mediante SQLAlchemy.
+    3. Ejecuta el script backend/init_db.sql para configurar RLS y pgvector.
+    4. Inserte datos mock iniciales (Tenant de pruebas y Usuario admin).
     """
+    print("Creando extensiones SQL en Postgres...")
+    db = SessionLocal()
+    try:
+        db.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
+        db.execute(text('CREATE EXTENSION IF NOT EXISTS "uuid-ossp";'))
+        db.commit()
+        print("Extensiones creadas con éxito.")
+    except Exception as e:
+        db.rollback()
+        print(f"Error al crear extensiones: {str(e)}")
+    finally:
+        db.close()
+
     print("Iniciando creación de tablas con SQLAlchemy...")
     Base.metadata.create_all(bind=engine)
     print("Tablas creadas con éxito.")
