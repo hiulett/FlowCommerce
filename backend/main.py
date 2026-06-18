@@ -297,9 +297,9 @@ def get_super_ai_keys(db: Session = Depends(get_db)):
             "supports_tools": k.supports_tools,
             "is_active": k.is_active,
             "failed_attempts": k.failed_attempts,
-            "cool_down_until": k.cool_down_until,
-            "last_used": k.last_used,
-            "created_at": k.created_at
+            "cool_down_until": k.cool_down_until.strftime("%Y-%m-%dT%H:%M:%SZ") if k.cool_down_until else None,
+            "last_used": k.last_used.strftime("%Y-%m-%dT%H:%M:%SZ") if k.last_used else None,
+            "created_at": k.created_at.strftime("%Y-%m-%dT%H:%M:%SZ") if k.created_at else None
         })
     return response_keys
 

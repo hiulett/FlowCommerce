@@ -229,11 +229,14 @@ async def run_conversational_agent(
         confirm_and_checkout_order_tool
     ]
 
-    max_attempts = 5
+    from backend.models import PlatformAIKey
+    active_keys_count = db.query(PlatformAIKey).filter(PlatformAIKey.is_active == True).count()
+    max_attempts = max(5, active_keys_count)
     last_error = None
+    tried_key_ids = []
 
     for attempt in range(max_attempts):
-        key_record = balancer.get_next_available_key(db, requires_tools=True)
+        key_record = balancer.get_next_available_key(db, requires_tools=True, exclude_ids=tried_key_ids)
         
         provider = None
         api_key = None
@@ -242,9 +245,9 @@ async def run_conversational_agent(
         
         if key_record:
             provider = key_record.provider
-            api_key = decrypt_key(key_record.api_key)
             model_name = key_record.model_name
             key_id = key_record.id
+            tried_key_ids.append(key_id)
             print(f"[IA] [BALANCER] Intento {attempt + 1}: Usando llave '{key_record.name}' de base de datos ({provider} | {model_name})")
         else:
             # Fallback a variables de entorno si la base de datos no tiene llaves
@@ -262,6 +265,9 @@ async def run_conversational_agent(
                 return "Lo siento, no hay proveedores de Inteligencia Artificial configurados en la plataforma."
 
         try:
+            if key_record:
+                api_key = decrypt_key(key_record.api_key)
+
             if provider == "openai":
                 from openai import OpenAI
                 import json

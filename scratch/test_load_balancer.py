@@ -18,8 +18,8 @@ def test_load_balancer():
     
     db = SessionLocal()
     try:
-        # Limpiar llaves previas de prueba
-        db.query(PlatformAIKey).filter(PlatformAIKey.name.like("Test Key %")).delete(synchronize_session=False)
+        # Limpiar todas las llaves previas de prueba
+        db.query(PlatformAIKey).delete()
         db.commit()
         
         # 1. Crear claves de prueba encriptadas
@@ -75,6 +75,22 @@ def test_load_balancer():
         print(f"Seleccionada después de enfriar la 1ra: {next_selected.name} (Debería ser Test Key 2)")
         assert next_selected.id == key2.id, "Error: El balanceador seleccionó una llave que está en periodo de enfriamiento."
         print("[TEST PASS] Aislamiento de llaves en enfriamiento correcto.")
+        
+        # 5. Test Exclude IDs
+        print("\n--- Test de Exclusión de Llaves (exclude_ids) ---")
+        # Ambos están en enfriamiento o activos, pero excluimos Test Key 2
+        exclude_test = balancer.get_next_available_key(db, exclude_ids=[key2.id])
+        print(f"Seleccionada excluyendo Test Key 2: {exclude_test.name} (Debería ser Test Key 1)")
+        assert exclude_test.id == key1.id, "Error: Se seleccionó una llave excluida."
+        
+        # Poner ambas en enfriamiento y excluir la menos bloqueada (Key 1)
+        balancer.mark_cool_down(db, key1.id, minutes=10)
+        balancer.mark_cool_down(db, key2.id, minutes=20)
+        
+        fallback_exclude = balancer.get_next_available_key(db, exclude_ids=[key1.id])
+        print(f"Fallback excluyendo Test Key 1 (menos bloqueada): {fallback_exclude.name} (Debería ser Test Key 2)")
+        assert fallback_exclude.id == key2.id, "Error: No se respetó la exclusión en la lógica de fallback."
+        print("[TEST PASS] Exclusión de llaves (exclude_ids) respetada correctamente en modo normal y fallback.")
         
         # Limpieza de llaves de prueba
         db.query(PlatformAIKey).filter(PlatformAIKey.name.like("Test Key %")).delete(synchronize_session=False)
