@@ -311,7 +311,6 @@ def test_meta_api(db: Session = Depends(get_tenant_db)):
     
     import requests
     import time
-    from backend.config import settings
     
     start_time = time.time()
     url = f"https://graph.facebook.com/{settings.META_API_VERSION}/{phone_id}"
