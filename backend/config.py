@@ -17,6 +17,10 @@ class Settings(BaseSettings):
     # Gemini API
     GEMINI_API_KEY: Optional[str] = None
     
+    # Alternativas de IA (Groq / OpenAI compatible)
+    LLM_PROVIDER: str = "gemini" # 'gemini' o 'groq'
+    GROQ_API_KEY: Optional[str] = None
+    
     # Seguridad
     SECRET_KEY: str = "super_secret_jwt_signing_key_change_me_in_production"
     ALGORITHM: str = "HS256"

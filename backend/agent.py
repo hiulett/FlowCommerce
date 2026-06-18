@@ -57,7 +57,156 @@ async def run_conversational_agent(
         f"- Nunca inventes precios o stock. Si un producto no tiene stock, infórmalo educadamente."
     )
 
-    # 4. Configurar herramientas de Function Calling
+    # 4. Alternativa de IA con Groq (Llama-3.3-70b-versatile)
+    if settings.LLM_PROVIDER == "groq" and settings.GROQ_API_KEY:
+        try:
+            print(f"[IA] Usando proveedor alternativo Groq con modelo llama-3.3-70b-versatile...")
+            from openai import OpenAI
+            import json
+
+            client = OpenAI(
+                base_url="https://api.groq.com/openai/v1",
+                api_key=settings.GROQ_API_KEY
+            )
+            
+            openai_tools = [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "add_product_to_order",
+                        "description": "Agrega un producto del catálogo al pedido actual (carrito de compras) del cliente.",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "product_name": {"type": "string", "description": "Nombre aproximado del producto a agregar."},
+                                "quantity": {"type": "integer", "description": "Cantidad de unidades a pedir.", "default": 1}
+                            },
+                            "required": ["product_name"]
+                        }
+                    }
+                },
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "remove_product_from_order",
+                        "description": "Elimina o reduce la cantidad de un producto del pedido actual (carrito) del cliente.",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "product_name": {"type": "string", "description": "Nombre aproximado del producto a remover."},
+                                "quantity": {"type": "integer", "description": "Cantidad de unidades a remover.", "default": 1}
+                            },
+                            "required": ["product_name"]
+                        }
+                    }
+                },
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "get_order_summary",
+                        "description": "Devuelve el desglose detallado de todos los productos agregados al pedido actual y el total.",
+                        "parameters": {"type": "object", "properties": {}}
+                    }
+                },
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "confirm_and_checkout_order",
+                        "description": "Confirma el pedido final, bloquea el stock y cierra la compra.",
+                        "parameters": {"type": "object", "properties": {}}
+                    }
+                }
+            ]
+
+            messages = [{"role": "system", "content": system_prompt}]
+            for msg in history_messages:
+                role = "assistant" if msg.sender == "ASSISTANT" else "user"
+                messages.append({"role": role, "content": msg.content})
+            messages.append({"role": "user", "content": user_message})
+
+            response = client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=messages,
+                tools=openai_tools,
+                tool_choice="auto"
+            )
+
+            response_message = response.choices[0].message
+            tool_calls = response_message.tool_calls
+
+            if tool_calls:
+                tool_call = tool_calls[0]
+                function_name = tool_call.function.name
+                args = json.loads(tool_call.function.arguments)
+                print(f"[IA] Function Calling (Groq): El modelo solicitó ejecutar herramienta '{function_name}' con argumentos: {args}")
+                
+                tool_result = ""
+                if function_name == "add_product_to_order":
+                    tool_result = add_item_to_cart(
+                        db, tenant.id, customer_id, 
+                        args.get("product_name"), 
+                        int(args.get("quantity", 1))
+                    )
+                elif function_name == "remove_product_from_order":
+                    tool_result = remove_item_from_cart(
+                        db, tenant.id, customer_id, 
+                        args.get("product_name"), 
+                        int(args.get("quantity", 1))
+                    )
+                elif function_name == "get_order_summary":
+                    tool_result = get_cart_summary(db, tenant.id, customer_id)
+                elif function_name == "confirm_and_checkout_order":
+                    tool_result = checkout_cart(db, tenant.id, customer_id)
+                else:
+                    tool_result = "Función no implementada."
+
+                print(f"[IA] Tool Result (Groq): Resultado de ejecutar la herramienta '{function_name}': '{tool_result}'")
+
+                # Formatear el mensaje del asistente para enviarlo a la API
+                # Convertimos el objeto de respuesta del asistente en un diccionario compatible
+                ass_msg = {
+                    "role": "assistant",
+                    "content": response_message.content,
+                    "tool_calls": [
+                        {
+                            "id": tool_call.id,
+                            "type": "function",
+                            "function": {
+                                "name": tool_call.function.name,
+                                "arguments": tool_call.function.arguments
+                            }
+                        }
+                    ]
+                }
+                messages.append(ass_msg)
+                
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tool_call.id,
+                    "name": function_name,
+                    "content": tool_result
+                })
+
+                print(f"[IA] Enviando resultado de herramienta a Groq para obtener respuesta conversacional final...")
+                final_response = client.chat.completions.create(
+                    model="llama-3.3-70b-versatile",
+                    messages=messages
+                )
+                final_text = final_response.choices[0].message.content
+                print(f"[IA] Respuesta final post-herramienta (Groq) generada: '{final_text}'")
+                return final_text
+
+            print(f"[IA] Respuesta directa (Groq) generada: '{response_message.content}'")
+            return response_message.content
+
+        except Exception as e:
+            err_msg = str(e)
+            print(f"[IA] Error en el agente conversacional de Groq: {err_msg}")
+            if "quota" in err_msg.lower() or "429" in err_msg:
+                return "Lo siento, el servicio de Inteligencia Artificial (Groq) ha excedido su límite temporal. Por favor, reintenta en unos momentos."
+            return "Lo siento, tuve un problema temporal al procesar tu solicitud con el proveedor de respaldo. Por favor, reintenta."
+
+    # 5. Configurar herramientas de Function Calling (Gemini)
     # Definimos las funciones puente que Gemini podrá solicitar ejecutar
     tools_definitions = [
         add_product_to_order_tool,
