@@ -3130,6 +3130,7 @@ export function SuperAdminAIKeysView({ showToast, searchQuery }: { showToast: (m
                     else if (e.target.value === 'anthropic') setModelName('claude-3-5-sonnet-latest');
                     else if (e.target.value === 'openrouter') setModelName('google/gemini-2.5-flash');
                     else if (e.target.value === 'deepseek') setModelName('deepseek-chat');
+                    else if (e.target.value === 'ollama') setModelName('qwen2.5:3b');
                   }}>
                     <option value="gemini">Google Gemini</option>
                     <option value="groq">Groq</option>
@@ -3137,6 +3138,7 @@ export function SuperAdminAIKeysView({ showToast, searchQuery }: { showToast: (m
                     <option value="anthropic">Anthropic</option>
                     <option value="openrouter">OpenRouter</option>
                     <option value="deepseek">DeepSeek</option>
+                    <option value="ollama">Ollama (Local/VPS)</option>
                   </select>
                 </div>
 
