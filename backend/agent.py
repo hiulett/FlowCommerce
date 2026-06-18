@@ -262,7 +262,109 @@ async def run_conversational_agent(
                 return "Lo siento, no hay proveedores de Inteligencia Artificial configurados en la plataforma."
 
         try:
-            if provider == "groq":
+            if provider == "openai":
+                from openai import OpenAI
+                import json
+
+                client = OpenAI(
+                    api_key=api_key
+                )
+                
+                messages = [{"role": "system", "content": system_prompt}]
+                for msg in history_messages:
+                    role = "assistant" if msg.sender == "ASSISTANT" else "user"
+                    messages.append({"role": role, "content": msg.content})
+                messages.append({"role": "user", "content": user_message})
+
+                response = client.chat.completions.create(
+                    model=model_name,
+                    messages=messages,
+                    tools=openai_tools,
+                    tool_choice="auto"
+                )
+
+                response_message = response.choices[0].message
+                tool_calls = response_message.tool_calls
+
+                text_content = response_message.content or ""
+                func_name, text_tool_result = parse_and_execute_text_function(text_content, db, tenant.id, customer_id)
+                if func_name:
+                    print(f"[IA] Ejecutando llamada de texto en OpenAI para '{func_name}'...")
+                    messages.append({"role": "assistant", "content": text_content})
+                    messages.append({"role": "user", "content": f"Resultado de {func_name}: {text_tool_result}"})
+                    final_response = client.chat.completions.create(
+                        model=model_name,
+                        messages=messages
+                    )
+                    final_text = final_response.choices[0].message.content
+                    print(f"[IA] Respuesta final post-herramienta (OpenAI-Texto) generada: '{final_text}'")
+                    if key_id:
+                        balancer.update_last_used(db, key_id)
+                    return final_text
+
+                if tool_calls:
+                    tool_call = tool_calls[0]
+                    function_name = tool_call.function.name
+                    args = json.loads(tool_call.function.arguments)
+                    print(f"[IA] Function Calling (OpenAI): El modelo solicitó ejecutar herramienta '{function_name}' con argumentos: {args}")
+                    
+                    tool_result = ""
+                    if function_name == "add_product_to_order":
+                        tool_result = add_item_to_cart(db, tenant.id, customer_id, args.get("product_name"), int(args.get("quantity", 1)))
+                    elif function_name == "remove_product_from_order":
+                        tool_result = remove_item_from_cart(db, tenant.id, customer_id, args.get("product_name"), int(args.get("quantity", 1)))
+                    elif function_name == "get_order_summary":
+                        tool_result = get_cart_summary(db, tenant.id, customer_id)
+                    elif function_name == "confirm_and_checkout_order":
+                        tool_result = checkout_cart(
+                            db, tenant.id, customer_id,
+                            delivery_method=args.get("delivery_method", "DELIVERY"),
+                            shipping_address=args.get("shipping_address")
+                        )
+                    else:
+                        tool_result = "Función no implementada."
+
+                    print(f"[IA] Tool Result (OpenAI): Resultado de ejecutar la herramienta '{function_name}': '{tool_result}'")
+
+                    ass_msg = {
+                        "role": "assistant",
+                        "content": response_message.content,
+                        "tool_calls": [
+                            {
+                                "id": tool_call.id,
+                                "type": "function",
+                                "function": {
+                                    "name": tool_call.function.name,
+                                    "arguments": tool_call.function.arguments
+                                }
+                            }
+                        ]
+                    }
+                    messages.append(ass_msg)
+                    messages.append({
+                        "role": "tool",
+                        "tool_call_id": tool_call.id,
+                        "name": function_name,
+                        "content": tool_result
+                    })
+
+                    print(f"[IA] Enviando resultado de herramienta a OpenAI para obtener respuesta conversacional final...")
+                    final_response = client.chat.completions.create(
+                        model=model_name,
+                        messages=messages
+                    )
+                    final_text = final_response.choices[0].message.content
+                    print(f"[IA] Respuesta final post-herramienta (OpenAI) generada: '{final_text}'")
+                    if key_id:
+                        balancer.update_last_used(db, key_id)
+                    return final_text
+
+                print(f"[IA] Respuesta directa (OpenAI) generada: '{response_message.content}'")
+                if key_id:
+                    balancer.update_last_used(db, key_id)
+                return response_message.content
+
+            elif provider == "groq":
                 from openai import OpenAI
                 import json
 
