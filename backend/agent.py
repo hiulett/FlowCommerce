@@ -30,6 +30,8 @@ async def run_conversational_agent(
     Function Calling dinámico para interactuar con el carrito.
     """
     # 1. Recuperar historial de mensajes (últimos 10 mensajes)
+    print(f"[IA] Ejecutando agente conversacional para el cliente ID {customer_id} en la conversación ID {conversation.id}")
+    print(f"[IA] Mensaje del usuario recibido: '{user_message}'")
     history_messages = db.query(Message).filter(
         Message.conversation_id == conversation.id
     ).order_by(Message.created_at.desc()).limit(10).all()
@@ -38,9 +40,11 @@ async def run_conversational_agent(
     history_messages = list(reversed(history_messages))
 
     # 2. Generar embedding del mensaje del usuario y buscar productos similares (RAG)
+    print(f"[IA] Iniciando búsqueda semántica para el mensaje: '{user_message}'")
     msg_embedding = await get_embedding(user_message)
     relevant_products = search_products_semantic(db, tenant.id, msg_embedding, limit=4)
     products_context = format_products_context(relevant_products)
+    print(f"[IA] Búsqueda semántica (RAG) completada. Se encontraron {len(relevant_products)} productos relevantes para incluir en el contexto.")
 
     # 3. Construir el prompt del sistema
     system_prompt = (
@@ -86,6 +90,7 @@ async def run_conversational_agent(
         })
 
         # Generar respuesta de Gemini
+        print(f"[IA] Enviando solicitud a gemini-2.0-flash...")
         response = model.generate_content(contents)
 
         # 5. Gestionar llamadas a funciones (Function Calling Loop)
@@ -97,7 +102,7 @@ async def run_conversational_agent(
                 args = function_call.args
 
                 # Ejecutar la lógica de negocio local asociada
-                print(f"IA solicitó ejecutar herramienta: {function_name} con argumentos: {args}")
+                print(f"[IA] Function Calling: El modelo solicitó ejecutar herramienta '{function_name}' con argumentos: {args}")
                 
                 tool_result = ""
                 if function_name == "add_product_to_order":
@@ -119,6 +124,8 @@ async def run_conversational_agent(
                 else:
                     tool_result = "Función no implementada."
 
+                print(f"[IA] Tool Result: Resultado de ejecutar la herramienta '{function_name}': '{tool_result}'")
+
                 # Enviar el resultado de la función de vuelta a Gemini para respuesta final
                 contents.append(response.candidates[0].content) # Añadir petición de función
                 contents.append({
@@ -132,13 +139,16 @@ async def run_conversational_agent(
                 })
 
                 # Generar respuesta final post-ejecución
+                print(f"[IA] Enviando resultado de herramienta a Gemini para obtener la respuesta conversacional final...")
                 final_response = model.generate_content(contents)
+                print(f"[IA] Respuesta final post-herramienta generada: '{final_response.text}'")
                 return final_response.text
 
+        print(f"[IA] Respuesta directa del modelo generada: '{response.text}'")
         return response.text
 
     except Exception as e:
-        print(f"Error en el agente conversacional: {str(e)}")
+        print(f"[IA] Error en el agente conversacional: {str(e)}")
         return "Lo siento, tuve un problema temporal para procesar tu solicitud. Por favor, reintenta."
 
 # --- DEFINICIONES DE HERRAMIENTAS (TOOLS) PARA EL LLM ---

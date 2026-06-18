@@ -26,12 +26,16 @@ async def send_whatsapp_message(phone_id: str, access_token: str, to: str, text:
         }
     }
 
+    print(f"[WHATSAPP] Enviando mensaje de salida a {to} a través del Phone ID {phone_id}...")
     async with httpx.AsyncClient() as client:
         response = await client.post(url, headers=headers, json=payload)
         if response.status_code != 200:
-            print(f"Error al enviar mensaje de WhatsApp: {response.text}")
+            print(f"[WHATSAPP] Error al enviar mensaje a {to}: HTTP {response.status_code} - {response.text}")
             return None
-        return response.json()
+        res_data = response.json()
+        msg_id = res_data.get("messages", [{}])[0].get("id", "N/A")
+        print(f"[WHATSAPP] Mensaje enviado con éxito a {to}. ID de mensaje de Meta: {msg_id}")
+        return res_data
 
 def get_or_create_customer(db: Session, tenant_id: uuid.UUID, phone_number: str, profile_name: Optional[str] = None) -> Customer:
     """

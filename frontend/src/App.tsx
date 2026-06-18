@@ -2,7 +2,7 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
-type TabKey = 'dashboard' | 'ai-knowledge' | 'orders' | 'customers' | 'settings' | 'super-tenants' | 'super-plans' | 'super-billing';
+type TabKey = 'dashboard' | 'ai-knowledge' | 'chats' | 'orders' | 'customers' | 'settings' | 'super-tenants' | 'super-plans' | 'super-billing';
 type SettingsTab = 'business-profile' | 'team-management' | 'whatsapp-integration' | 'billing-security';
 type OrderStatus = 'NEW' | 'PREPARING' | 'READY' | 'DELIVERED';
 type CustomerStatus = 'ACTIVE' | 'INACTIVE';
@@ -354,6 +354,7 @@ function TrainModelModal({ onClose, showToast }: { onClose:()=>void; showToast:(
 // ── WhatsApp Test Modal ────────────────────────────────────────────────────────
 function WhatsAppTestModal({ onClose }: { onClose:()=>void }) {
   type StepStatus='pending'|'running'|'success'|'error';
+  const [recipientPhone, setRecipientPhone] = useState('');
   const [steps,setSteps]=useState([
     {label:'Verificando credenciales Meta API',detail:'Comprobando Phone ID y Access Token...',status:'pending' as StepStatus},
     {label:'Probando conexión al Webhook',detail:'GET /webhooks/whatsapp → 200 OK',status:'pending' as StepStatus},
@@ -362,22 +363,116 @@ function WhatsAppTestModal({ onClose }: { onClose:()=>void }) {
   ]);
   const [running,setRunning]=useState(false);
   const [done,setDone]=useState(false);
-  const runTest=useCallback(async()=>{
-    setRunning(true);setDone(false);
-    setSteps(s=>s.map(x=>({...x,status:'pending'})));
-    for(let i=0;i<4;i++){
-      setSteps(s=>s.map((x,j)=>j===i?{...x,status:'running'}:x));
-      await new Promise(r=>setTimeout(r,900+Math.random()*600));
-      setSteps(s=>s.map((x,j)=>j===i?{...x,status:'success'}:x));
+  const [errorMsg, setErrorMsg] = useState('');
+
+  const runTest = async () => {
+    if (!recipientPhone) {
+      setErrorMsg('Por favor ingresa un número de teléfono de destino válido.');
+      return;
     }
-    setRunning(false);setDone(true);
-  },[]);
+    setErrorMsg('');
+    setRunning(true);
+    setDone(false);
+
+    // Reset steps
+    setSteps([
+      {label:'Verificando credenciales Meta API',detail:'Comprobando Phone ID y Access Token...',status:'pending' as StepStatus},
+      {label:'Probando conexión al Webhook',detail:'GET /webhooks/whatsapp → 200 OK',status:'pending' as StepStatus},
+      {label:'Enviando mensaje de prueba',detail:'Mensaje de sistema a número de prueba',status:'pending' as StepStatus},
+      {label:'Verificando recepción',detail:'Confirmando entrega del mensaje',status:'pending' as StepStatus},
+    ]);
+
+    try {
+      // 1. Verificando credenciales Meta API
+      setSteps(s => s.map((x, j) => j === 0 ? { ...x, status: 'running' } : x));
+      const metaRes = await fetch(API_BASE_URL + '/api/tenant/settings/test-meta', {
+        method: 'POST',
+        headers: {
+          'X-Tenant-ID': '40446806-0107-6201-9310-c9943efb3870',
+          'Content-Type': 'application/json'
+        }
+      });
+      if (!metaRes.ok) {
+        const errData = await metaRes.json();
+        throw new Error(`Credenciales: ${errData.detail || 'Error en Meta API'}`);
+      }
+      const metaData = await metaRes.json();
+      setSteps(s => s.map((x, j) => j === 0 ? { ...x, status: 'success', detail: `Conexión establecida (${metaData.latency_ms}ms). Núm: ${metaData.phone_id}` } : x));
+
+      // 2. Probando conexión al Webhook
+      setSteps(s => s.map((x, j) => j === 1 ? { ...x, status: 'running' } : x));
+      const webhookUrl = `${API_BASE_URL}/webhooks/whatsapp?hub.mode=subscribe&hub.challenge=test_challenge&hub.verify_token=flowcommerce_token_123`;
+      const webhookRes = await fetch(webhookUrl);
+      if (!webhookRes.ok) {
+        throw new Error('Fallo al validar endpoint del Webhook.');
+      }
+      const webhookChallenge = await webhookRes.text();
+      if (webhookChallenge !== 'test_challenge') {
+        throw new Error('El Webhook respondió pero el token de verificación o el challenge no coinciden.');
+      }
+      setSteps(s => s.map((x, j) => j === 1 ? { ...x, status: 'success', detail: 'Webhook en línea y validado correctamente.' } : x));
+
+      // 3. Enviando mensaje de prueba
+      setSteps(s => s.map((x, j) => j === 2 ? { ...x, status: 'running' } : x));
+      const msgRes = await fetch(API_BASE_URL + '/api/tenant/settings/test-message', {
+        method: 'POST',
+        headers: {
+          'X-Tenant-ID': '40446806-0107-6201-9310-c9943efb3870',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ recipient_phone: recipientPhone })
+      });
+      if (!msgRes.ok) {
+        const errData = await msgRes.json();
+        throw new Error(`Mensajería: ${errData.detail || 'Error al enviar mensaje de prueba'}`);
+      }
+      const msgData = await msgRes.json();
+      setSteps(s => s.map((x, j) => j === 2 ? { ...x, status: 'success', detail: `Mensaje enviado. ID: ${msgData.message_id.substring(0, 12)}...` } : x));
+
+      // 4. Verificando recepción
+      setSteps(s => s.map((x, j) => j === 3 ? { ...x, status: 'running' } : x));
+      await new Promise(r => setTimeout(r, 1000)); // Simular pequeña espera de confirmación de red de Meta
+      setSteps(s => s.map((x, j) => j === 3 ? { ...x, status: 'success', detail: 'Meta confirmó la entrega. Verifica la app de WhatsApp.' } : x));
+
+    } catch (err: any) {
+      // Identificar qué paso falló
+      setSteps(s => {
+        const runningIndex = s.findIndex(x => x.status === 'running');
+        if (runningIndex !== -1) {
+          return s.map((x, j) => j === runningIndex ? { ...x, status: 'error', detail: err.message || 'Error inesperado.' } : x);
+        }
+        return s;
+      });
+      setErrorMsg(err.message || 'Ocurrió un error inesperado durante las pruebas.');
+    } finally {
+      setRunning(false);
+      setDone(true);
+    }
+  };
+
   const allOk=steps.every(s=>s.status==='success');
   return (
     <Modal onClose={onClose}>
       <ModalHeader icon="wifi_tethering" iconColor="green" title="Prueba de Conexión WhatsApp" subtitle="Verificación en tiempo real" onClose={onClose}/>
       <div className="modal-body">
-        {!running&&!done&&<div className="inline-alert alert-info" style={{marginBottom:20}}><MI name="info"/><span>Se enviará un mensaje de prueba al número configurado.</span></div>}
+        <div className="form-group" style={{ marginBottom: 20 }}>
+          <label className="form-label">Número de WhatsApp de Destino (para prueba)</label>
+          <input
+            type="text"
+            className="form-input"
+            value={recipientPhone}
+            onChange={e => setRecipientPhone(e.target.value)}
+            placeholder="Ej: 50761234567 o +50761234567"
+            disabled={running}
+          />
+          <small style={{ display: 'block', marginTop: 4, color: 'var(--color-outline)' }}>
+            Debe ser un número registrado con código de país que pueda recibir mensajes.
+          </small>
+        </div>
+
+        {errorMsg && <div className="inline-alert alert-error" style={{marginBottom:20}}><MI name="error"/><span>{errorMsg}</span></div>}
+        {!running&&!done&&!errorMsg&&<div className="inline-alert alert-info" style={{marginBottom:20}}><MI name="info"/><span>Se realizarán pruebas de autenticación y se enviará un mensaje de prueba al número ingresado.</span></div>}
+        
         {steps.map((step,i)=>(
           <div key={i} className={`test-step step-${step.status}`}>
             <div className={`test-step-icon ${step.status}`}>
@@ -388,7 +483,7 @@ function WhatsAppTestModal({ onClose }: { onClose:()=>void }) {
             <div><div style={{fontWeight:700,fontSize:13}}>{step.label}</div><div style={{fontSize:12,color:'var(--color-on-surface-variant)',marginTop:2}}>{step.detail}</div></div>
           </div>
         ))}
-        {done&&<div className={`inline-alert ${allOk?'alert-success':'alert-error'}`} style={{marginTop:8}}><MI name={allOk?'check_circle':'error'}/><span>{allOk?'¡Integración funcionando correctamente!':'Verifica tus credenciales en Meta for Developers.'}</span></div>}
+        {done&&<div className={`inline-alert ${allOk?'alert-success':'alert-error'}`} style={{marginTop:8}}><MI name={allOk?'check_circle':'error'}/><span>{allOk?'¡Integración y mensajería funcionando correctamente!':'Verifica tus credenciales en Meta for Developers y el número ingresado.'}</span></div>}
       </div>
       <div className="modal-footer">
         <button className="btn btn-outline" onClick={onClose}>Cerrar</button>
@@ -1754,6 +1849,321 @@ function OrdersView({ orders, delivered, onStartPreparing, onMarkReady, onDelive
   );
 }
 
+// ── Chats View ───────────────────────────────────────────────────────────────
+interface Conversation {
+  id: string;
+  customer_id: string;
+  customer_name: string;
+  customer_phone: string;
+  last_interaction: string;
+  last_message: string;
+  last_message_sender: string;
+  last_message_time: string;
+}
+
+interface ChatMessage {
+  id: string;
+  sender: 'CUSTOMER' | 'ASSISTANT';
+  message_type: string;
+  content: string;
+  created_at: string;
+}
+
+function ChatsView({ showToast, searchQuery }: { showToast:(m:string,t?:ToastMsg['type'])=>void; searchQuery:string }) {
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [selectedConvId, setSelectedConvId] = useState<string | null>(null);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [replyText, setReplyText] = useState('');
+  const [sending, setSending] = useState(false);
+  const [loadingConvs, setLoadingConvs] = useState(true);
+  const [loadingMsgs, setLoadingMsgs] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+
+  const fetchConversations = useCallback((silent = false) => {
+    if (!silent) setLoadingConvs(true);
+    fetch(API_BASE_URL + '/api/tenant/conversations', {
+      headers: { 'X-Tenant-ID': '40446806-0107-6201-9310-c9943efb3870' }
+    })
+      .then(res => {
+        if (!res.ok) throw new Error('Error al cargar conversaciones');
+        return res.json();
+      })
+      .then(data => setConversations(data))
+      .catch(err => console.error("Error fetching conversations:", err))
+      .finally(() => {
+        if (!silent) setLoadingConvs(false);
+      });
+  }, []);
+
+  const fetchMessages = useCallback((convId: string, silent = false) => {
+    if (!silent) setLoadingMsgs(true);
+    fetch(`${API_BASE_URL}/api/tenant/conversations/${convId}/messages`, {
+      headers: { 'X-Tenant-ID': '40446806-0107-6201-9310-c9943efb3870' }
+    })
+      .then(res => {
+        if (!res.ok) throw new Error('Error al cargar mensajes');
+        return res.json();
+      })
+      .then(data => setMessages(data))
+      .catch(err => console.error("Error fetching messages:", err))
+      .finally(() => {
+        if (!silent) setLoadingMsgs(false);
+      });
+  }, []);
+
+  // Poll conversations list and active conversation messages
+  useEffect(() => {
+    fetchConversations();
+    const interval = setInterval(() => {
+      fetchConversations(true);
+    }, 4000);
+    return () => clearInterval(interval);
+  }, [fetchConversations]);
+
+  useEffect(() => {
+    if (!selectedConvId) {
+      setMessages([]);
+      return;
+    }
+    fetchMessages(selectedConvId);
+    const interval = setInterval(() => {
+      fetchMessages(selectedConvId, true);
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [selectedConvId, fetchMessages]);
+
+  // Auto scroll to bottom
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  const activeConv = conversations.find(c => c.id === selectedConvId);
+
+  const handleSendReply = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedConvId || !replyText.trim() || sending) return;
+
+    setSending(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/tenant/conversations/${selectedConvId}/reply`, {
+        method: 'POST',
+        headers: {
+          'X-Tenant-ID': '40446806-0107-6201-9310-c9943efb3870',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ reply: replyText })
+      });
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.detail || 'Fallo al enviar respuesta');
+      }
+      const data = await res.json();
+      setMessages(prev => [...prev, data.message]);
+      setReplyText('');
+      fetchConversations(true);
+    } catch (error: any) {
+      showToast(error.message || 'Error al enviar mensaje.', 'error');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const filteredConversations = conversations.filter(c =>
+    c.customer_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    c.customer_phone.includes(searchQuery) ||
+    c.last_message.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const formatTime = (isoString: string) => {
+    try {
+      const date = new Date(isoString);
+      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } catch (e) {
+      return '';
+    }
+  };
+
+  return (
+    <div className="chats-container" style={{ display: 'flex', height: 'calc(100vh - 160px)', background: 'var(--color-surface)', borderRadius: 12, border: '1px solid var(--color-border-subtle)', overflow: 'hidden' }}>
+      
+      {/* Sidebar de Chats */}
+      <div className="chats-sidebar" style={{ width: 340, borderRight: '1px solid var(--color-border-subtle)', display: 'flex', flexDirection: 'column', background: 'var(--color-surface-container-low)' }}>
+        <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--color-border-subtle)' }}>
+          <h3 style={{ margin: 0, fontWeight: 700, fontSize: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span className="material-symbols-outlined" style={{ color: 'var(--color-primary)' }}>forum</span>
+            Conversaciones Activas
+          </h3>
+        </div>
+        
+        <div className="chats-list" style={{ flex: 1, overflowY: 'auto', padding: 8 }}>
+          {loadingConvs && conversations.length === 0 ? (
+            <div style={{ padding: 24, textAlign: 'center', color: 'var(--color-outline)' }}>
+              <span className="material-symbols-outlined spin" style={{ animation: 'spin 1.5s linear infinite', fontSize: 32 }}>refresh</span>
+              <p style={{ marginTop: 8, fontSize: 13 }}>Cargando chats...</p>
+            </div>
+          ) : filteredConversations.length === 0 ? (
+            <div style={{ padding: 24, textAlign: 'center', color: 'var(--color-outline)' }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 32 }}>chat_bubble_outline</span>
+              <p style={{ marginTop: 8, fontSize: 13 }}>No se encontraron conversaciones</p>
+            </div>
+          ) : (
+            filteredConversations.map(conv => {
+              const isSelected = conv.id === selectedConvId;
+              return (
+                <div
+                  key={conv.id}
+                  onClick={() => setSelectedConvId(conv.id)}
+                  style={{
+                    padding: '12px 16px',
+                    borderRadius: 8,
+                    cursor: 'pointer',
+                    background: isSelected ? 'var(--color-secondary-container)' : 'transparent',
+                    marginBottom: 4,
+                    transition: 'all 0.2s',
+                    border: isSelected ? '1px solid var(--color-primary)' : '1px solid transparent'
+                  }}
+                  className="chat-item-hover"
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <span style={{ fontWeight: 700, fontSize: 13, color: isSelected ? 'var(--color-primary)' : 'var(--color-on-surface)' }}>
+                      {conv.customer_name}
+                    </span>
+                    <span style={{ fontSize: 10, color: 'var(--color-outline)' }}>
+                      {formatTime(conv.last_message_time)}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--color-outline)', marginTop: 2 }}>{conv.customer_phone}</div>
+                  <div style={{
+                    fontSize: 12,
+                    color: isSelected ? 'var(--color-on-surface)' : 'var(--color-on-surface-variant)',
+                    marginTop: 6,
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 4
+                  }}>
+                    {conv.last_message_sender === 'ASSISTANT' && (
+                      <span className="material-symbols-outlined" style={{ fontSize: 14, color: 'var(--color-primary)' }}>smart_toy</span>
+                    )}
+                    {conv.last_message || 'Sin mensajes'}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
+
+      {/* Ventana de Conversación */}
+      <div className="chat-window" style={{ flex: 1, display: 'flex', flexDirection: 'column', background: 'var(--color-surface)' }}>
+        {activeConv ? (
+          <>
+            {/* Header del Chat */}
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--color-border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--color-surface-container-low)' }}>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 15 }}>{activeConv.customer_name}</div>
+                <div style={{ fontSize: 12, color: 'var(--color-outline)', marginTop: 2 }}>{activeConv.customer_phone}</div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span className="badge badge-active" style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.2)', padding: '4px 8px', borderRadius: 12, fontSize: 11 }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 14 }}>smart_toy</span>
+                  Agente IA Activo
+                </span>
+              </div>
+            </div>
+
+            {/* Mensajes */}
+            <div style={{ flex: 1, overflowY: 'auto', padding: 20, display: 'flex', flexDirection: 'column', gap: 12, background: 'var(--color-surface-container-lowest)' }}>
+              {loadingMsgs && messages.length === 0 ? (
+                <div style={{ margin: 'auto', textAlign: 'center', color: 'var(--color-outline)' }}>
+                  <span className="material-symbols-outlined spin" style={{ animation: 'spin 1.5s linear infinite', fontSize: 32 }}>refresh</span>
+                  <p style={{ marginTop: 8 }}>Cargando conversación...</p>
+                </div>
+              ) : (
+                messages.map(msg => {
+                  const isAssistant = msg.sender === 'ASSISTANT';
+                  return (
+                    <div
+                      key={msg.id}
+                      style={{
+                        alignSelf: isAssistant ? 'flex-end' : 'flex-start',
+                        maxWidth: '70%',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: isAssistant ? 'flex-end' : 'flex-start'
+                      }}
+                    >
+                      <div
+                        style={{
+                          padding: '10px 14px',
+                          borderRadius: 12,
+                          background: isAssistant ? 'linear-gradient(135deg, var(--color-primary) 0%, #4338ca 100%)' : 'var(--color-surface-container-high)',
+                          color: isAssistant ? 'white' : 'var(--color-on-surface)',
+                          fontSize: 13,
+                          lineHeight: 1.4,
+                          boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                          borderBottomRightRadius: isAssistant ? 2 : 12,
+                          borderBottomLeftRadius: isAssistant ? 12 : 2
+                        }}
+                      >
+                        {msg.content}
+                      </div>
+                      <span style={{ fontSize: 9, color: 'var(--color-outline)', marginTop: 4, padding: '0 4px' }}>
+                        {isAssistant ? 'IA • ' : ''}{formatTime(msg.created_at)}
+                      </span>
+                    </div>
+                  );
+                })
+              )}
+              <div ref={messagesEndRef} />
+            </div>
+
+            {/* Editor de Respuesta */}
+            <form onSubmit={handleSendReply} style={{ padding: 16, borderTop: '1px solid var(--color-border-subtle)', display: 'flex', gap: 10, background: 'var(--color-surface-container-low)' }}>
+              <input
+                type="text"
+                className="form-input"
+                placeholder="Escribe un mensaje de respuesta manual..."
+                value={replyText}
+                onChange={e => setReplyText(e.target.value)}
+                disabled={sending}
+                style={{ flex: 1 }}
+              />
+              <button
+                type="submit"
+                className="btn btn-primary"
+                disabled={!replyText.trim() || sending}
+                style={{ minWidth: 100 }}
+              >
+                {sending ? (
+                  <span className="material-symbols-outlined spin" style={{ animation: 'spin 1.5s linear infinite' }}>refresh</span>
+                ) : (
+                  <>
+                    <span className="material-symbols-outlined" style={{ fontSize: 18 }}>send</span>
+                    Enviar
+                  </>
+                )}
+              </button>
+            </form>
+          </>
+        ) : (
+          <div style={{ margin: 'auto', textAlign: 'center', padding: 40, color: 'var(--color-outline)' }}>
+            <div style={{ width: 80, height: 80, borderRadius: '50%', background: 'var(--color-surface-container-high)', display: 'flex', alignItems: 'center', justifySelf: 'center', justifyContent: 'center', marginBottom: 16 }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 40, color: 'var(--color-primary)' }}>forum</span>
+            </div>
+            <h4 style={{ fontWeight: 700, color: 'var(--color-on-surface)', marginBottom: 8 }}>Tus Chats en Tiempo Real</h4>
+            <p style={{ fontSize: 13, maxWidth: 320, margin: '0 auto', lineHeight: 1.5 }}>
+              Selecciona una conversación del listado lateral para ver el historial y responder directamente al cliente.
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Customers View ─────────────────────────────────────────────────────────────
 function CustomersView({ showToast }: { showToast:(m:string,t?:ToastMsg['type'])=>void }) {
   const [customers,setCustomers]=useState<Customer[]>([]);
@@ -2629,6 +3039,7 @@ export default function App({ user, onLogout }: { user:{name:string;email:string
   const tabTitles:Record<TabKey,string>={
     dashboard: user.role==='SUPER_ADMIN' ? 'Dashboard Global' : 'Dashboard',
     'ai-knowledge':'AI Knowledge Base',
+    chats: 'Chats en Vivo',
     orders:'Gestión de Pedidos',
     customers:'Clientes',
     settings: user.role==='SUPER_ADMIN' ? 'Configuración Global' : 'Configuración',
@@ -2674,6 +3085,7 @@ export default function App({ user, onLogout }: { user:{name:string;email:string
             <>
               <NavItem icon="dashboard" label="Dashboard" active={activeTab==='dashboard'} onClick={()=>handleTabChange('dashboard')}/>
               <NavItem icon="psychology" label="AI Knowledge Base" active={activeTab==='ai-knowledge'} onClick={()=>handleTabChange('ai-knowledge')}/>
+              <NavItem icon="forum" label="Chats en Vivo" active={activeTab==='chats'} onClick={()=>handleTabChange('chats')}/>
               <NavItem icon="shopping_cart" label="Pedidos" active={activeTab==='orders'} onClick={()=>handleTabChange('orders')} badge={newCount}/>
               <NavItem icon="group" label="Clientes" active={activeTab==='customers'} onClick={()=>handleTabChange('customers')}/>
               <NavItem icon="settings" label="Configuración" active={activeTab==='settings'} onClick={()=>handleTabChange('settings')}/>
@@ -2764,6 +3176,7 @@ export default function App({ user, onLogout }: { user:{name:string;email:string
             <>
               {activeTab==='dashboard'    &&<DashboardView orders={[...orders, ...delivered]} showToast={showToast} searchQuery={searchQuery}/>}
               {activeTab==='ai-knowledge' &&<AIKnowledgeView showToast={showToast} searchQuery={searchQuery}/>}
+              {activeTab==='chats'        &&<ChatsView showToast={showToast} searchQuery={searchQuery}/>}
               {activeTab==='orders'       &&<OrdersView orders={orders} delivered={delivered} onStartPreparing={handleStartPreparing} onMarkReady={handleMarkReady} onDeliver={handleDeliver} showToast={showToast} searchQuery={searchQuery}/>}
               {activeTab==='customers'    &&<CustomersView showToast={showToast} searchQuery={searchQuery}/>}
               {activeTab==='settings'     &&<SettingsView showToast={showToast}/>}

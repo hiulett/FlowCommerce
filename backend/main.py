@@ -68,6 +68,7 @@ async def process_whatsapp_event(payload: WhatsAppWebhookPayload):
                 
                 # Obtener metadatos del destinatario
                 phone_id = value.metadata.get("phone_number_id")
+                print(f"[WEBHOOK] Evento de WhatsApp recibido. Metadata Phone ID: {phone_id}")
                 
                 # Buscar el Tenant correspondiente
                 tenant = None
@@ -76,17 +77,20 @@ async def process_whatsapp_event(payload: WhatsAppWebhookPayload):
                 if not tenant:
                     tenant = db.query(Tenant).filter(Tenant.whatsapp_phone_id == phone_id).first()
                 if not tenant:
-                    print(f"Tenant no encontrado para phone_id: {phone_id}")
+                    print(f"[WEBHOOK] Tenant no encontrado para phone_id: {phone_id}")
                     continue
                 
+                print(f"[WEBHOOK] Asociado al Tenant: {tenant.name} (ID: {tenant.id})")
+                
                 # Configurar sesión con RLS para aislamiento de datos
+                print(f"[RLS] Estableciendo app.current_tenant_id = {tenant.id} en la sesión de base de datos")
                 db.execute(text("SET LOCAL app.current_tenant_id = :tenant_id"), {"tenant_id": str(tenant.id)})
                 
                 # Procesar cada mensaje en el webhook
                 for msg in value.messages:
                     # Deduplicar
                     if is_duplicate_message(msg.id):
-                        print(f"Mensaje duplicado omitido: {msg.id}")
+                        print(f"[WEBHOOK] Mensaje duplicado omitido: {msg.id}")
                         continue
                     
                     sender_phone = msg.from_
@@ -95,6 +99,8 @@ async def process_whatsapp_event(payload: WhatsAppWebhookPayload):
                         contact = next((c for c in value.contacts if c.wa_id == sender_phone), None)
                         if contact:
                             profile_name = contact.profile.get("name")
+                    
+                    print(f"[WEBHOOK] Procesando mensaje ID {msg.id} de cliente {sender_phone} ({profile_name or 'Sin Nombre'})")
                     
                     # Registrar/Actualizar cliente
                     customer = get_or_create_customer(db, tenant.id, sender_phone, profile_name)
@@ -113,12 +119,14 @@ async def process_whatsapp_event(payload: WhatsAppWebhookPayload):
                         content = f"[Mensaje de tipo {msg_type} no soportado en MVP]"
                     
                     save_incoming_message(db, conversation.id, content, msg_type)
+                    print(f"[DB] Guardado mensaje entrante de {sender_phone} ({msg_type}): '{content}'")
                     
                     if tenant.ai_paused:
-                        print(f"El agente de IA para el tenant {tenant.name} está pausado. No se enviará respuesta automática.")
+                        print(f"[IA] El agente de IA para el tenant {tenant.name} está pausado. Omitiendo respuesta automática.")
                         continue
                     
                     # Ejecutar Agente de IA Conversacional real
+                    print(f"[IA] Iniciando agente conversacional para cliente {sender_phone}...")
                     reply_text = await run_conversational_agent(
                         db=db,
                         tenant=tenant,
@@ -126,6 +134,7 @@ async def process_whatsapp_event(payload: WhatsAppWebhookPayload):
                         customer_id=customer.id,
                         user_message=content
                     )
+                    print(f"[IA] Agente conversacional completado con respuesta: '{reply_text}'")
                     
                     # Guardar respuesta del asistente en BD
                     message_assistant = Message(
@@ -136,6 +145,7 @@ async def process_whatsapp_event(payload: WhatsAppWebhookPayload):
                     )
                     db.add(message_assistant)
                     db.commit()
+                    print(f"[DB] Guardada respuesta del asistente en base de datos.")
                     
                     # Enviar mensaje oficial al WhatsApp
                     await send_whatsapp_message(
@@ -337,6 +347,45 @@ def test_meta_api(db: Session = Depends(get_tenant_db)):
             detail=f"Error de red al conectar con Meta: {str(e)}"
         )
 
+class TestMessagePayload(BaseModel):
+    recipient_phone: str
+
+@app.post("/api/tenant/settings/test-message")
+async def test_whatsapp_messaging(data: TestMessagePayload, db: Session = Depends(get_tenant_db)):
+    tenant = db.query(Tenant).first()
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant context not found")
+    
+    phone_id = settings.WHATSAPP_PHONE_ID or tenant.whatsapp_phone_id
+    access_token = settings.WHATSAPP_ACCESS_TOKEN or tenant.whatsapp_access_token
+    if not phone_id or not access_token:
+        raise HTTPException(
+            status_code=400,
+            detail="No se han configurado las credenciales de WhatsApp Business API."
+        )
+    
+    from backend.whatsapp_service import send_whatsapp_message
+    
+    test_text = "Esta es una prueba de mensajería real desde FlowCommerce para verificar tu conexión de salida."
+    res = await send_whatsapp_message(
+        phone_id=phone_id,
+        access_token=access_token,
+        to=data.recipient_phone,
+        text=test_text
+    )
+    
+    if res and "messages" in res:
+        return {
+            "status": "success",
+            "message": f"Mensaje de prueba enviado con éxito a {data.recipient_phone}.",
+            "message_id": res["messages"][0]["id"]
+        }
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail="Error al enviar el mensaje de prueba a través de Meta API."
+        )
+
 @app.post("/api/tenant/broadcast")
 def send_mass_broadcast(data: BroadcastPayload, db: Session = Depends(get_tenant_db)):
     tenant = db.query(Tenant).first()
@@ -494,5 +543,110 @@ def get_tenant_customers(db: Session = Depends(get_tenant_db)):
             "lastOrder": last_date
         })
     return result
+
+@app.get("/api/tenant/conversations")
+def get_tenant_conversations(db: Session = Depends(get_tenant_db)):
+    from backend.models import Conversation, Message, Customer
+    conversations = db.query(Conversation).order_by(Conversation.last_interaction.desc()).all()
+    result = []
+    for conv in conversations:
+        customer = db.query(Customer).filter(Customer.id == conv.customer_id).first()
+        last_msg = db.query(Message).filter(Message.conversation_id == conv.id).order_by(Message.created_at.desc()).first()
+        
+        result.append({
+            "id": str(conv.id),
+            "customer_id": str(conv.customer_id),
+            "customer_name": customer.full_name if customer else "Cliente Anónimo",
+            "customer_phone": customer.phone_number if customer else "",
+            "last_interaction": conv.last_interaction.isoformat(),
+            "last_message": last_msg.content if last_msg else "",
+            "last_message_sender": last_msg.sender if last_msg else "",
+            "last_message_time": last_msg.created_at.isoformat() if last_msg else conv.last_interaction.isoformat()
+        })
+    return result
+
+@app.get("/api/tenant/conversations/{conversation_id}/messages")
+def get_conversation_messages(conversation_id: str, db: Session = Depends(get_tenant_db)):
+    from backend.models import Conversation, Message
+    conv_uuid = uuid.UUID(conversation_id)
+    conv = db.query(Conversation).filter(Conversation.id == conv_uuid).first()
+    if not conv:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+        
+    messages = db.query(Message).filter(Message.conversation_id == conv_uuid).order_by(Message.created_at.asc()).all()
+    result = []
+    for msg in messages:
+        result.append({
+            "id": str(msg.id),
+            "sender": msg.sender,
+            "message_type": msg.message_type,
+            "content": msg.content,
+            "created_at": msg.created_at.isoformat()
+        })
+    return result
+
+class OperatorReplyPayload(BaseModel):
+    reply: str
+
+@app.post("/api/tenant/conversations/{conversation_id}/reply")
+async def send_operator_reply(conversation_id: str, data: OperatorReplyPayload, db: Session = Depends(get_tenant_db)):
+    from backend.models import Conversation, Message, Customer, Tenant
+    from datetime import datetime
+    conv_uuid = uuid.UUID(conversation_id)
+    conv = db.query(Conversation).filter(Conversation.id == conv_uuid).first()
+    if not conv:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+        
+    customer = db.query(Customer).filter(Customer.id == conv.customer_id).first()
+    if not customer:
+        raise HTTPException(status_code=404, detail="Customer not found")
+        
+    tenant = db.query(Tenant).first()
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant context not found")
+        
+    phone_id = settings.WHATSAPP_PHONE_ID or tenant.whatsapp_phone_id
+    access_token = settings.WHATSAPP_ACCESS_TOKEN or tenant.whatsapp_access_token
+    if not phone_id or not access_token:
+        raise HTTPException(
+            status_code=400,
+            detail="No se han configurado las credenciales de WhatsApp Business API."
+        )
+        
+    from backend.whatsapp_service import send_whatsapp_message
+    
+    res = await send_whatsapp_message(
+        phone_id=phone_id,
+        access_token=access_token,
+        to=customer.phone_number,
+        text=data.reply
+    )
+    
+    if res and "messages" in res:
+        msg = Message(
+            conversation_id=conv.id,
+            sender="ASSISTANT",
+            message_type="TEXT",
+            content=data.reply
+        )
+        db.add(msg)
+        conv.last_interaction = datetime.utcnow()
+        db.commit()
+        db.refresh(msg)
+        return {
+            "status": "success",
+            "message": {
+                "id": str(msg.id),
+                "sender": msg.sender,
+                "message_type": msg.message_type,
+                "content": msg.content,
+                "created_at": msg.created_at.isoformat()
+            }
+        }
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail="Error al enviar el mensaje de respuesta a través de Meta API."
+        )
 
 
