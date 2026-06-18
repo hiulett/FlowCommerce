@@ -348,11 +348,15 @@ async def run_conversational_agent(
     try:
         # Inicializar modelo con herramientas
         gemini_model_name = settings.LLM_MODEL or "gemini-2.0-flash"
+        if not gemini_model_name.lower().startswith("gemini"):
+            gemini_model_name = "gemini-2.0-flash"
+            
         model = genai.GenerativeModel(
             model_name=gemini_model_name,
             tools=tools_definitions,
             system_instruction=system_prompt
         )
+
 
         # Formatear el historial de chat para la API de Gemini
         contents = []
