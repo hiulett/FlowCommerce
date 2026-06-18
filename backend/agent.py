@@ -332,9 +332,9 @@ async def run_conversational_agent(
         except Exception as e:
             err_msg = str(e)
             print(f"[IA] Error en el agente conversacional de Groq: {err_msg}")
-            if "quota" in err_msg.lower() or "429" in err_msg:
-                return "Lo siento, el servicio de Inteligencia Artificial (Groq) ha excedido su límite temporal. Por favor, reintenta en unos momentos."
-            return "Lo siento, tuve un problema temporal al procesar tu solicitud con el proveedor de respaldo. Por favor, reintenta."
+            print("[IA] Fallback automático a Gemini debido a error en Groq (ej: cuotas/límites)...")
+            # Continuar al bloque de Gemini como respaldo
+
 
     # 5. Configurar herramientas de Function Calling (Gemini)
     # Definimos las funciones puente que Gemini podrá solicitar ejecutar
