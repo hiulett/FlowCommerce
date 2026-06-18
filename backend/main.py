@@ -413,8 +413,8 @@ def test_meta_api(db: Session = Depends(get_tenant_db)):
     tenant = db.query(Tenant).first()
     if not tenant:
         raise HTTPException(status_code=404, detail="Tenant context not found")
-    phone_id = settings.WHATSAPP_PHONE_ID or tenant.whatsapp_phone_id
-    access_token = settings.WHATSAPP_ACCESS_TOKEN or tenant.whatsapp_access_token
+    phone_id = tenant.whatsapp_phone_id
+    access_token = tenant.whatsapp_access_token
     if not phone_id or not access_token:
         raise HTTPException(
             status_code=400,
@@ -467,8 +467,8 @@ async def test_whatsapp_messaging(data: TestMessagePayload, db: Session = Depend
     if not tenant:
         raise HTTPException(status_code=404, detail="Tenant context not found")
     
-    phone_id = settings.WHATSAPP_PHONE_ID or tenant.whatsapp_phone_id
-    access_token = settings.WHATSAPP_ACCESS_TOKEN or tenant.whatsapp_access_token
+    phone_id = tenant.whatsapp_phone_id
+    access_token = tenant.whatsapp_access_token
     if not phone_id or not access_token:
         raise HTTPException(
             status_code=400,
@@ -783,8 +783,8 @@ async def send_order_invoice(order_id: str, db: Session = Depends(get_tenant_db)
     )
     
     # Enviar por WhatsApp
-    phone_id = settings.WHATSAPP_PHONE_ID or tenant.whatsapp_phone_id
-    access_token = settings.WHATSAPP_ACCESS_TOKEN or tenant.whatsapp_access_token
+    phone_id = tenant.whatsapp_phone_id
+    access_token = tenant.whatsapp_access_token
     if not phone_id or not access_token:
         raise HTTPException(
             status_code=400,
@@ -893,8 +893,8 @@ async def send_operator_reply(conversation_id: str, data: OperatorReplyPayload, 
     if not tenant:
         raise HTTPException(status_code=404, detail="Tenant context not found")
         
-    phone_id = settings.WHATSAPP_PHONE_ID or tenant.whatsapp_phone_id
-    access_token = settings.WHATSAPP_ACCESS_TOKEN or tenant.whatsapp_access_token
+    phone_id = tenant.whatsapp_phone_id
+    access_token = tenant.whatsapp_access_token
     if not phone_id or not access_token:
         raise HTTPException(
             status_code=400,
