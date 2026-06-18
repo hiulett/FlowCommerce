@@ -148,7 +148,10 @@ async def run_conversational_agent(
         return response.text
 
     except Exception as e:
-        print(f"[IA] Error en el agente conversacional: {str(e)}")
+        err_msg = str(e)
+        print(f"[IA] Error en el agente conversacional: {err_msg}")
+        if "quota" in err_msg.lower() or "429" in err_msg:
+            return "Lo siento, el servicio de Inteligencia Artificial de FlowCommerce ha excedido su cuota o límite de peticiones. Por favor, intente de nuevo en unos momentos o valide la facturación de su API Key."
         return "Lo siento, tuve un problema temporal para procesar tu solicitud. Por favor, reintenta."
 
 # --- DEFINICIONES DE HERRAMIENTAS (TOOLS) PARA EL LLM ---

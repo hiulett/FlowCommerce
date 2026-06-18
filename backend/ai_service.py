@@ -16,17 +16,20 @@ genai.configure(api_key=settings.GEMINI_API_KEY or settings.SECRET_KEY) # Se usa
 async def get_embedding(text: str) -> List[float]:
     """
     Genera el vector de embeddings para un texto dado usando la API oficial de Gemini (o fallback a zeros).
-    Se usa el modelo 'models/embedding-001'.
+    Se usa el modelo 'models/gemini-embedding-001' y se trunca/completa a 1536 dimensiones.
     """
     try:
         # Se asume la inicialización del cliente de google-generativeai
         result = genai.embed_content(
             model="models/gemini-embedding-001",
             content=text,
-            task_type="retrieval_document"
+            task_type="retrieval_document",
+            output_dimensionality=1536
         )
         emb = result['embedding']
-        if len(emb) < 1536:
+        if len(emb) > 1536:
+            emb = emb[:1536]
+        elif len(emb) < 1536:
             emb = emb + [0.0] * (1536 - len(emb))
         return emb
     except Exception as e:
