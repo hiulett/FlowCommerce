@@ -11,8 +11,7 @@ class Settings(BaseSettings):
     # WhatsApp Cloud API
     WHATSAPP_VERIFY_TOKEN: str = "flowcommerce_token_123"
     META_API_VERSION: str = "v19.0"
-    WHATSAPP_PHONE_ID: Optional[str] = None
-    WHATSAPP_ACCESS_TOKEN: Optional[str] = None
+
     
     # Gemini API
     GEMINI_API_KEY: Optional[str] = None

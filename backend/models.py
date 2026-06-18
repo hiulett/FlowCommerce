@@ -188,4 +188,22 @@ class KnowledgeDocument(Base):
     status = Column(String(20), default="PENDING") # PENDING, TRAINED
     last_updated = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+class PlatformAIKey(Base):
+    __tablename__ = "platform_ai_keys"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    provider = Column(String(50), nullable=False) # 'gemini', 'groq', 'openai', 'anthropic'
+    name = Column(String(100), nullable=False) # Identificador amigable (ej: 'Gemini Key Personal 1')
+    api_key = Column(Text, nullable=False) # Clave API encriptada en AES-256
+    model_name = Column(String(100), nullable=False) # Ej: 'gemini-2.0-flash', 'llama-3.3-70b-versatile'
+    supports_tools = Column(Boolean, default=True) # Si el modelo soporta Function Calling
+    is_active = Column(Boolean, default=True)
+    
+    # Métricas de Salud del Balanceador
+    failed_attempts = Column(Integer, default=0)
+    cool_down_until = Column(DateTime, nullable=True) # Timestamp hasta el cual está bloqueada por error 429
+    last_used = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 

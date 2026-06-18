@@ -2,7 +2,7 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
-type TabKey = 'dashboard' | 'ai-knowledge' | 'chats' | 'orders' | 'customers' | 'settings' | 'super-tenants' | 'super-plans' | 'super-billing';
+type TabKey = 'dashboard' | 'ai-knowledge' | 'chats' | 'orders' | 'customers' | 'settings' | 'super-tenants' | 'super-plans' | 'super-billing' | 'super-ai-keys';
 type SettingsTab = 'business-profile' | 'team-management' | 'whatsapp-integration' | 'billing-security';
 type OrderStatus = 'NEW' | 'CONFIRMED' | 'PREPARING' | 'READY' | 'SHIPPED' | 'DELIVERED';
 type CustomerStatus = 'ACTIVE' | 'INACTIVE';
@@ -2920,6 +2920,252 @@ export function SuperAdminBillingView({ logs, onUpdateLog, showToast, searchQuer
   );
 }
 
+// ─── Super Admin AI Keys Management View ─────────────────────────────────────────
+export interface AIKey {
+  id: string;
+  provider: string;
+  name: string;
+  api_key: string;
+  model_name: string;
+  supports_tools: boolean;
+  is_active: boolean;
+  failed_attempts: number;
+  cool_down_until: string | null;
+  last_used: string | null;
+  created_at: string;
+}
+
+export function SuperAdminAIKeysView({ showToast, searchQuery }: { showToast: (m: string, t?: any) => void; searchQuery: string }) {
+  const [keys, setKeys] = useState<AIKey[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [modal, setModal] = useState<boolean>(false);
+
+  // Form State
+  const [name, setName] = useState('');
+  const [provider, setProvider] = useState('gemini');
+  const [modelName, setModelName] = useState('gemini-2.0-flash');
+  const [apiKey, setApiKey] = useState('');
+  const [supportsTools, setSupportsTools] = useState(true);
+
+  const fetchKeys = useCallback(() => {
+    setLoading(true);
+    fetch(API_BASE_URL + '/api/super/ai-keys')
+      .then(res => res.json())
+      .then(data => {
+        setKeys(data);
+        setLoading(false);
+      })
+      .catch(err => {
+        console.error("Error fetching AI keys:", err);
+        setLoading(false);
+      });
+  }, []);
+
+  useEffect(() => {
+    fetchKeys();
+  }, [fetchKeys]);
+
+  const handleToggle = (id: string, name: string) => {
+    fetch(`${API_BASE_URL}/api/super/ai-keys/${id}/toggle`, {
+      method: 'PUT'
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.status === 'success') {
+          showToast(`Conexión "${name}" ${data.is_active ? 'activada' : 'desactivada'}`, 'success');
+          fetchKeys();
+        }
+      })
+      .catch(err => console.error("Error toggling key:", err));
+  };
+
+  const handleDelete = (id: string, name: string) => {
+    if (!window.confirm(`¿Está seguro de que desea eliminar la conexión de IA "${name}"?`)) return;
+    fetch(`${API_BASE_URL}/api/super/ai-keys/${id}`, {
+      method: 'DELETE'
+    })
+      .then(res => res.json())
+      .then(data => {
+        showToast(`Conexión "${name}" eliminada`, 'success');
+        fetchKeys();
+      })
+      .catch(err => console.error("Error deleting key:", err));
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    fetch(API_BASE_URL + '/api/super/ai-keys', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        provider,
+        name,
+        api_key: apiKey,
+        model_name: modelName,
+        supports_tools: supportsTools
+      })
+    })
+      .then(res => res.json())
+      .then(() => {
+        showToast('Conexión de IA agregada correctamente', 'success');
+        setModal(false);
+        // Reset form
+        setName('');
+        setApiKey('');
+        setSupportsTools(true);
+        fetchKeys();
+      })
+      .catch(err => console.error("Error adding AI key:", err));
+  };
+
+  const filtered = keys.filter(k => {
+    if (!searchQuery) return true;
+    const q = searchQuery.toLowerCase();
+    return k.name.toLowerCase().includes(q) || k.model_name.toLowerCase().includes(q) || k.provider.toLowerCase().includes(q);
+  });
+
+  const getStatusBadge = (k: AIKey) => {
+    if (!k.is_active) {
+      return <span className="badge badge-inactive">Inactivo</span>;
+    }
+    if (k.cool_down_until) {
+      const coolDownTime = new Date(k.cool_down_until).getTime();
+      const now = new Date().getTime();
+      if (coolDownTime > now) {
+        const remaining = Math.round((coolDownTime - now) / 1000 / 60);
+        return <span className="badge badge-preparing">En Enfriamiento ({remaining} min)</span>;
+      }
+    }
+    return <span className="badge badge-active">Activo / Saludable</span>;
+  };
+
+  return (
+    <div>
+      <div className="page-header">
+        <div className="page-header-title">
+          <h2>Balanceador de IA</h2>
+          <p><MI name="smart_toy"/>Administración de llaves API y modelos para balanceo automático</p>
+        </div>
+        <button className="btn btn-primary" onClick={() => setModal(true)}>
+          <MI name="add"/>Agregar Conexión de IA
+        </button>
+      </div>
+
+      <div className="data-table-wrapper">
+        {loading ? (
+          <div style={{ padding: 40, textAlign: 'center', color: 'var(--color-outline)' }}>Cargando conexiones...</div>
+        ) : filtered.length === 0 ? (
+          <div style={{ padding: 40, textAlign: 'center', color: 'var(--color-outline)' }}>No se encontraron conexiones de IA configuradas.</div>
+        ) : (
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Proveedor</th>
+                <th>Nombre Conexión</th>
+                <th>Modelo</th>
+                <th style={{ textAlign: 'center' }}>Soporta Tools</th>
+                <th>Métricas / Salud</th>
+                <th>Último Uso</th>
+                <th>Estado</th>
+                <th style={{ textAlign: 'right' }}>Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map(k => (
+                <tr key={k.id}>
+                  <td>
+                    <span className="badge badge-new" style={{ textTransform: 'uppercase' }}>{k.provider}</span>
+                  </td>
+                  <td style={{ fontWeight: 600 }}>{k.name}</td>
+                  <td className="font-mono" style={{ fontSize: 12 }}>{k.model_name}</td>
+                  <td style={{ textAlign: 'center' }}>
+                    <span className="material-symbols-outlined" style={{ color: k.supports_tools ? 'var(--color-success-emerald)' : 'var(--color-outline)' }}>
+                      {k.supports_tools ? 'check_circle' : 'cancel'}
+                    </span>
+                  </td>
+                  <td style={{ fontSize: 12 }}>
+                    <div>Fallos: {k.failed_attempts}</div>
+                  </td>
+                  <td style={{ fontSize: 12 }}>
+                    {k.last_used ? k.last_used.replace('T', ' ').substring(0, 16) : 'Nunca usado'}
+                  </td>
+                  <td>
+                    {getStatusBadge(k)}
+                  </td>
+                  <td style={{ textAlign: 'right' }}>
+                    <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                      <button className="btn btn-ghost" style={{ padding: '4px 10px' }} onClick={() => handleToggle(k.id, k.name)}>
+                        <MI name={k.is_active ? 'block' : 'check_circle'} style={{ fontSize: 16 }}/>
+                      </button>
+                      <button className="btn btn-ghost" style={{ padding: '4px 10px', color: 'var(--color-error)' }} onClick={() => handleDelete(k.id, k.name)}>
+                        <MI name="delete" style={{ fontSize: 16 }}/>
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {modal && (
+        <Modal onClose={() => setModal(false)}>
+          <ModalHeader icon="smart_toy" iconColor="blue" title="Agregar Conexión de IA" subtitle="Registra una nueva API Key en el balanceador" onClose={() => setModal(false)}/>
+          <form onSubmit={handleSubmit}>
+            <div className="modal-body">
+              <div className="form-group">
+                <label className="form-label">Nombre de Conexión</label>
+                <input className="form-input" required placeholder="Ej: Gemini Key Producción" value={name} onChange={e => setName(e.target.value)}/>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="form-group">
+                  <label className="form-label">Proveedor</label>
+                  <select className="form-input" value={provider} onChange={e => {
+                    setProvider(e.target.value);
+                    if (e.target.value === 'gemini') setModelName('gemini-2.0-flash');
+                    else if (e.target.value === 'groq') setModelName('llama-3.3-70b-versatile');
+                    else if (e.target.value === 'openai') setModelName('gpt-4o');
+                    else if (e.target.value === 'anthropic') setModelName('claude-3-5-sonnet-latest');
+                  }}>
+                    <option value="gemini">Google Gemini</option>
+                    <option value="groq">Groq</option>
+                    <option value="openai">OpenAI</option>
+                    <option value="anthropic">Anthropic</option>
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Modelo</label>
+                  <input className="form-input" required placeholder="Ej: gemini-2.0-flash" value={modelName} onChange={e => setModelName(e.target.value)}/>
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">API Key</label>
+                <input className="form-input font-mono" type="password" required placeholder="Ingresa la clave API" value={apiKey} onChange={e => setApiKey(e.target.value)}/>
+                <span className="form-hint">La clave será encriptada mediante AES-256 antes de guardarse en base de datos.</span>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                  <input type="checkbox" checked={supportsTools} onChange={e => setSupportsTools(e.target.checked)}/>
+                  <span>Soporta Function Calling (Herramientas del Carrito/RAG)</span>
+                </label>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="btn btn-outline" onClick={() => setModal(false)}>Cancelar</button>
+              <button type="submit" className="btn btn-primary">Guardar Conexión</button>
+            </div>
+          </form>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // ROOT APP
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -3158,7 +3404,8 @@ export default function App({ user, onLogout }: { user:{name:string;email:string
     settings: user.role==='SUPER_ADMIN' ? 'Configuración Global' : 'Configuración',
     'super-tenants': 'Tenants',
     'super-plans': 'Planes',
-    'super-billing': 'Facturación'
+    'super-billing': 'Facturación',
+    'super-ai-keys': 'Balanceador de IA'
   };
 
   const handleTabChange = (tab: TabKey) => {
@@ -3190,6 +3437,7 @@ export default function App({ user, onLogout }: { user:{name:string;email:string
             <>
               <NavItem icon="dashboard" label="Dashboard Global" active={activeTab==='dashboard'} onClick={()=>handleTabChange('dashboard')}/>
               <NavItem icon="storefront" label="Tenants" active={activeTab==='super-tenants'} onClick={()=>handleTabChange('super-tenants')}/>
+              <NavItem icon="smart_toy" label="Balanceador de IA" active={activeTab==='super-ai-keys'} onClick={()=>handleTabChange('super-ai-keys')}/>
               <NavItem icon="workspace_premium" label="Planes" active={activeTab==='super-plans'} onClick={()=>handleTabChange('super-plans')}/>
               <NavItem icon="receipt_long" label="Facturación" active={activeTab==='super-billing'} onClick={()=>handleTabChange('super-billing')}/>
               <NavItem icon="settings" label="Configuración" active={activeTab==='settings'} onClick={()=>handleTabChange('settings')}/>
@@ -3263,6 +3511,7 @@ export default function App({ user, onLogout }: { user:{name:string;email:string
             <>
               {activeTab==='dashboard'     &&<SuperAdminDashboardView tenants={tenants} logs={financialLogs}/>}
               {activeTab==='super-tenants' &&<SuperAdminTenantsView tenants={tenants} plans={platformPlans} onUpdateTenant={handleUpdateTenant} showToast={showToast} searchQuery={searchQuery}/>}
+              {activeTab==='super-ai-keys' &&<SuperAdminAIKeysView showToast={showToast} searchQuery={searchQuery}/>}
               {activeTab==='super-plans'   &&<SuperAdminPlansView plans={platformPlans} onUpdatePlan={handleUpdatePlan} showToast={showToast}/>}
               {activeTab==='super-billing' &&<SuperAdminBillingView logs={financialLogs} onUpdateLog={handleUpdateLog} showToast={showToast} searchQuery={searchQuery}/>}
               {activeTab==='settings'      &&<div className="card"><div className="nexus-indicator"/><div className="card-body">

@@ -27,6 +27,10 @@ app = FastAPI(
 @app.on_event("startup")
 def startup_db_migration():
     print("[MIGRATION] Running startup database migrations...")
+    from backend.database import Base, engine
+    # Crear tablas que no existan
+    Base.metadata.create_all(bind=engine)
+    
     db = SessionLocal()
     try:
         db.execute(text("ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_method VARCHAR(30) DEFAULT 'DELIVERY';"))
@@ -38,6 +42,7 @@ def startup_db_migration():
         print(f"[MIGRATION] Error running startup database migrations: {e}")
     finally:
         db.close()
+
 
 
 # Configuración de CORS
@@ -87,11 +92,7 @@ async def process_whatsapp_event(payload: WhatsAppWebhookPayload):
                 print(f"[WEBHOOK] Evento de WhatsApp recibido. Metadata Phone ID: {phone_id}")
                 
                 # Buscar el Tenant correspondiente
-                tenant = None
-                if settings.WHATSAPP_PHONE_ID and phone_id == settings.WHATSAPP_PHONE_ID:
-                    tenant = db.query(Tenant).filter(Tenant.id == uuid.UUID("40446806-0107-6201-9310-c9943efb3870")).first()
-                if not tenant:
-                    tenant = db.query(Tenant).filter(Tenant.whatsapp_phone_id == phone_id).first()
+                tenant = db.query(Tenant).filter(Tenant.whatsapp_phone_id == phone_id).first()
                 if not tenant:
                     print(f"[WEBHOOK] Tenant no encontrado para phone_id: {phone_id}")
                     continue
@@ -183,8 +184,8 @@ async def process_whatsapp_event(payload: WhatsAppWebhookPayload):
                     
                     # Enviar mensaje oficial al WhatsApp
                     await send_whatsapp_message(
-                        phone_id=settings.WHATSAPP_PHONE_ID or tenant.whatsapp_phone_id,
-                        access_token=settings.WHATSAPP_ACCESS_TOKEN or tenant.whatsapp_access_token,
+                        phone_id=tenant.whatsapp_phone_id,
+                        access_token=tenant.whatsapp_access_token,
                         to=sender_phone,
                         text=reply_text
                     )
@@ -272,6 +273,83 @@ def refund_super_transaction(tx_id: str, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(tx)
     return tx
+
+class AIKeyCreate(BaseModel):
+    provider: str
+    name: str
+    api_key: str
+    model_name: str
+    supports_tools: bool = True
+
+@app.get("/api/super/ai-keys")
+def get_super_ai_keys(db: Session = Depends(get_db)):
+    from backend.models import PlatformAIKey
+    keys = db.query(PlatformAIKey).all()
+    # Mask API key for security in responses
+    response_keys = []
+    for k in keys:
+        response_keys.append({
+            "id": str(k.id),
+            "provider": k.provider,
+            "name": k.name,
+            "api_key": "********",
+            "model_name": k.model_name,
+            "supports_tools": k.supports_tools,
+            "is_active": k.is_active,
+            "failed_attempts": k.failed_attempts,
+            "cool_down_until": k.cool_down_until,
+            "last_used": k.last_used,
+            "created_at": k.created_at
+        })
+    return response_keys
+
+@app.post("/api/super/ai-keys")
+def create_super_ai_key(data: AIKeyCreate, db: Session = Depends(get_db)):
+    from backend.models import PlatformAIKey
+    from backend.ai_balancer import encrypt_key
+    encrypted = encrypt_key(data.api_key)
+    new_key = PlatformAIKey(
+        provider=data.provider,
+        name=data.name,
+        api_key=encrypted,
+        model_name=data.model_name,
+        supports_tools=data.supports_tools,
+        is_active=True
+    )
+    db.add(new_key)
+    db.commit()
+    db.refresh(new_key)
+    return {
+        "id": str(new_key.id),
+        "provider": new_key.provider,
+        "name": new_key.name,
+        "model_name": new_key.model_name,
+        "supports_tools": new_key.supports_tools,
+        "is_active": new_key.is_active
+    }
+
+@app.put("/api/super/ai-keys/{key_id}/toggle")
+def toggle_super_ai_key(key_id: str, db: Session = Depends(get_db)):
+    from backend.models import PlatformAIKey
+    key_uuid = uuid.UUID(key_id)
+    key_record = db.query(PlatformAIKey).filter(PlatformAIKey.id == key_uuid).first()
+    if not key_record:
+        raise HTTPException(status_code=404, detail="AI Key not found")
+    key_record.is_active = not key_record.is_active
+    db.commit()
+    db.refresh(key_record)
+    return {"status": "success", "is_active": key_record.is_active}
+
+@app.delete("/api/super/ai-keys/{key_id}")
+def delete_super_ai_key(key_id: str, db: Session = Depends(get_db)):
+    from backend.models import PlatformAIKey
+    key_uuid = uuid.UUID(key_id)
+    key_record = db.query(PlatformAIKey).filter(PlatformAIKey.id == key_uuid).first()
+    if not key_record:
+        raise HTTPException(status_code=404, detail="AI Key not found")
+    db.delete(key_record)
+    db.commit()
+    return {"status": "success", "message": "AI Key deleted"}
 
 # ─── Tenant Admin Endpoints (Multi-Tenant with RLS) ───────────────────────────
 from backend.database import get_tenant_db
