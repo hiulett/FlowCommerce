@@ -3128,11 +3128,13 @@ export function SuperAdminAIKeysView({ showToast, searchQuery }: { showToast: (m
                     else if (e.target.value === 'groq') setModelName('llama-3.3-70b-versatile');
                     else if (e.target.value === 'openai') setModelName('gpt-4o');
                     else if (e.target.value === 'anthropic') setModelName('claude-3-5-sonnet-latest');
+                    else if (e.target.value === 'openrouter') setModelName('google/gemini-2.5-flash');
                   }}>
                     <option value="gemini">Google Gemini</option>
                     <option value="groq">Groq</option>
                     <option value="openai">OpenAI</option>
                     <option value="anthropic">Anthropic</option>
+                    <option value="openrouter">OpenRouter</option>
                   </select>
                 </div>
 
