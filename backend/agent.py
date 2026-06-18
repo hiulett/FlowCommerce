@@ -146,8 +146,11 @@ async def run_conversational_agent(
         f"  2. Si el cliente elige a domicilio ('DELIVERY'), debes pedirle de forma obligatoria su dirección completa de entrega y/o su ubicación de WhatsApp.\n"
         f"  3. Si elige retirar en el local ('PICKUP'), no requiere pedir dirección de envío.\n"
         f"- NUNCA invoques 'confirm_and_checkout_order' usando direcciones genéricas o placeholders como 'dirección que proporcionarás' o 'dirección del cliente'. Si no tienes la dirección real y detallada provista por el cliente para un Domicilio, pídesela primero.\n"
-        f"- NUNCA le digas al cliente que su pedido está confirmado o listo para entrega si no has ejecutado exitosamente la herramienta 'confirm_and_checkout_order' primero. Solo confirma el pedido si la herramienta te devuelve que la orden fue confirmada con éxito."
+        f"- NUNCA le digas al cliente que su pedido está confirmado o listo para entrega si no has ejecutado exitosamente la herramienta 'confirm_and_checkout_order' primero. Solo confirma el pedido si la herramienta te devuelve que la orden fue confirmada con éxito.\n"
+        f"- NUNCA inventes o asumas el contenido del carrito. Si vas a confirmar un pedido o si una operación falla, usa 'get_order_summary' para ver exactamente qué productos están en el carrito actualmente.\n"
+        f"- Si la herramienta 'confirm_and_checkout_order' te devuelve un mensaje indicando que la compra falló o que hay un error (por ejemplo, por falta de stock de algún producto), debes informar al cliente de dicho error específico. NUNCA le digas que su pedido fue confirmado o que está listo para retirar/despachar si la herramienta falló."
     )
+
 
 
     # 4. Alternativa de IA con Groq (Llama-3.3-70b-versatile)
