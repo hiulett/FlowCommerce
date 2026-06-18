@@ -139,13 +139,16 @@ async def run_conversational_agent(
         f"REGLAS OBLIGATORIAS:\n"
         f"- Basa tus respuestas EXCLUSIVAMENTE en el CONTEXTO DE NEGOCIO y la INFORMACIÓN ADICIONAL provista arriba.\n"
         f"- Si el cliente te pide comprar o agregar productos, debes invocar la herramienta correspondiente (Function Calling).\n"
+        f"- PROHIBIDO: Nunca escribas llamadas a funciones como texto en tu mensaje visible para el usuario (evita '/function=...', '<function...>', etc.). Utiliza únicamente el sistema nativo de llamadas a herramientas (Tool Calls/Function Calling).\n"
         f"- Nunca inventes precios o stock. Si un producto no tiene stock, infórmalo educadamente.\n"
         f"- ANTES DE FINALIZAR O CONFIRMAR LA ORDEN (es decir, antes de llamar a 'confirm_and_checkout_order'), DEBES PREGUNTAR obligatoriamente al cliente lo siguiente:\n"
         f"  1. ¿Desea entrega a domicilio ('DELIVERY') o retirar en el local ('PICKUP')?\n"
         f"  2. Si el cliente elige a domicilio ('DELIVERY'), debes pedirle de forma obligatoria su dirección completa de entrega y/o su ubicación de WhatsApp.\n"
         f"  3. Si elige retirar en el local ('PICKUP'), no requiere pedir dirección de envío.\n"
-        f"  Una vez que tengas definidos el método de entrega (y la dirección si eligió delivery), procede a llamar a la función 'confirm_and_checkout_order' con los parámetros correspondientes."
+        f"- NUNCA invoques 'confirm_and_checkout_order' usando direcciones genéricas o placeholders como 'dirección que proporcionarás' o 'dirección del cliente'. Si no tienes la dirección real y detallada provista por el cliente para un Domicilio, pídesela primero.\n"
+        f"- NUNCA le digas al cliente que su pedido está confirmado o listo para entrega si no has ejecutado exitosamente la herramienta 'confirm_and_checkout_order' primero. Solo confirma el pedido si la herramienta te devuelve que la orden fue confirmada con éxito."
     )
+
 
     # 4. Alternativa de IA con Groq (Llama-3.3-70b-versatile)
     if settings.LLM_PROVIDER == "groq" and settings.GROQ_API_KEY:
