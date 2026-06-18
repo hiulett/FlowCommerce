@@ -76,3 +76,40 @@ def format_products_context(products: List[Product]) -> str:
         category_name = p.category.name if p.category else "General"
         context += f"- ID: {p.id} | Nombre: {p.name} | Categoría: {category_name} | Precio: ${p.price} | Stock Disponible: {p.stock} | Descripción: {p.description or 'Sin descripción'}\n"
     return context
+
+async def parse_catalog_document_to_products(content: str) -> List[Dict[str, Any]]:
+    """
+    Usa la API de Gemini para estructurar el contenido de un documento de catálogo
+    en una lista de diccionarios de productos.
+    """
+    import json
+    try:
+        model = genai.GenerativeModel("gemini-2.0-flash")
+        prompt = (
+            "Analiza el siguiente texto que contiene un catálogo o menú de productos y extrae "
+            "todos los productos en formato JSON. Cada producto debe tener los siguientes campos:\n"
+            "- name: Nombre del producto (ej: 'Pizza Pepperoni Familiar')\n"
+            "- description: Descripción corta (ej: 'Con doble queso y pepperoni')\n"
+            "- price: Precio numérico decimal (ej: 14.99)\n"
+            "- stock: Cantidad disponible (usa 10 por defecto si no se menciona)\n"
+            "- category: Categoría del producto (ej: 'Pizzas', 'Bebidas')\n\n"
+            "Retorna EXCLUSIVAMENTE un arreglo JSON válido. No uses markdown, no añadas explicaciones.\n\n"
+            f"Texto:\n{content}"
+        )
+        response = model.generate_content(prompt)
+        text = response.text.strip()
+        if text.startswith("```json"):
+            text = text.split("```json")[1].split("```")[0].strip()
+        elif text.startswith("```"):
+            text = text.split("```")[1].split("```")[0].strip()
+        
+        products = json.loads(text)
+        if isinstance(products, list):
+            return products
+        elif isinstance(products, dict) and "products" in products:
+            return products["products"]
+        return []
+    except Exception as e:
+        print(f"Error parsing catalog document with Gemini: {e}")
+        return []
+

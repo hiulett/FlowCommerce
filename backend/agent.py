@@ -96,12 +96,16 @@ async def run_conversational_agent(
     Integra memoria histórica, contexto RAG vectorial (pgvector) y
     Function Calling dinámico para interactuar con el carrito.
     """
+    from sqlalchemy.sql import text
+    db.execute(text("SET LOCAL app.current_tenant_id = :tenant_id"), {"tenant_id": str(tenant.id)})
+
     # 1. Recuperar historial de mensajes (últimos 10 mensajes)
     print(f"[IA] Ejecutando agente conversacional para el cliente ID {customer_id} en la conversación ID {conversation.id}")
     print(f"[IA] Mensaje del usuario recibido: '{user_message}'")
     history_messages = db.query(Message).filter(
         Message.conversation_id == conversation.id
     ).order_by(Message.created_at.desc()).limit(10).all()
+
     
     # Invertir el orden para que sea cronológico
     history_messages = list(reversed(history_messages))

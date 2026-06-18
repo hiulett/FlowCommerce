@@ -497,12 +497,101 @@ def delete_tenant_document(doc_id: str, db: Session = Depends(get_tenant_db)):
     return {"status": "deleted"}
 
 @app.post("/api/tenant/documents/train")
-def train_tenant_documents(db: Session = Depends(get_tenant_db)):
+async def train_tenant_documents(db: Session = Depends(get_tenant_db)):
+    from decimal import Decimal
+    from backend.ai_service import parse_catalog_document_to_products, get_embedding
+    from backend.models import Product, Category, Tenant
+    
+    tenant = db.query(Tenant).first()
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant context not found")
+
     docs = db.query(KnowledgeDocument).all()
     for doc in docs:
         doc.status = "TRAINED"
     db.commit()
-    return {"status": "trained", "count": len(docs)}
+
+    # Buscar documentos de tipo CATALOG o con título "menu"
+    catalog_docs = db.query(KnowledgeDocument).filter(KnowledgeDocument.type == "CATALOG").all()
+    if not catalog_docs:
+        catalog_docs = db.query(KnowledgeDocument).filter(KnowledgeDocument.title.ilike("%menu%")).all()
+
+    parsed_count = 0
+    if catalog_docs:
+        extracted_products = []
+        for doc in catalog_docs:
+            if doc.content:
+                parsed = await parse_catalog_document_to_products(doc.content)
+                extracted_products.extend(parsed)
+        
+        if extracted_products:
+            active_product_names = []
+            for item in extracted_products:
+                name = item.get("name")
+                if not name:
+                    continue
+                active_product_names.append(name.lower())
+                
+                description = item.get("description", "")
+                price = item.get("price", 0.0)
+                stock = item.get("stock", 10)
+                category_name = item.get("category", "General")
+                
+                # Obtener o crear categoría
+                category = db.query(Category).filter(
+                    Category.tenant_id == tenant.id,
+                    Category.name.ilike(category_name)
+                ).first()
+                if not category:
+                    category = Category(tenant_id=tenant.id, name=category_name)
+                    db.add(category)
+                    db.commit()
+                    db.refresh(category)
+                
+                # Generar embedding del producto
+                embedding_vector = await get_embedding(f"{name} {description}")
+                
+                # Upsert producto
+                prod = db.query(Product).filter(
+                    Product.tenant_id == tenant.id,
+                    Product.name.ilike(name)
+                ).first()
+                
+                if prod:
+                    prod.description = description
+                    prod.price = Decimal(str(price))
+                    prod.stock = stock
+                    prod.category_id = category.id
+                    prod.is_active = True
+                    prod.embedding = embedding_vector
+                else:
+                    prod = Product(
+                        tenant_id=tenant.id,
+                        category_id=category.id,
+                        name=name,
+                        description=description,
+                        price=Decimal(str(price)),
+                        stock=stock,
+                        is_active=True,
+                        embedding=embedding_vector
+                    )
+                    db.add(prod)
+                db.commit()
+                parsed_count += 1
+            
+            # Desactivar productos anteriores que no están en el nuevo catálogo
+            if active_product_names:
+                old_products = db.query(Product).filter(
+                    Product.tenant_id == tenant.id,
+                    Product.is_active == True
+                ).all()
+                for p in old_products:
+                    if p.name.lower() not in active_product_names:
+                        p.is_active = False
+                db.commit()
+
+    return {"status": "trained", "count": len(docs), "products_extracted": parsed_count}
+
 
 @app.get("/api/tenant/orders")
 def get_tenant_orders(db: Session = Depends(get_tenant_db)):
