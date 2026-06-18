@@ -4,7 +4,7 @@ from sqlalchemy import and_
 from typing import List, Dict, Any
 
 from backend.config import settings
-from backend.models import Tenant, Message, Conversation
+from backend.models import Tenant, Message, Conversation, KnowledgeDocument
 from backend.ai_service import get_embedding, search_products_semantic, format_products_context
 from backend.cart_service import (
     add_item_to_cart,
@@ -73,7 +73,11 @@ def parse_and_execute_text_function(text: str, db: Session, tenant_id: uuid.UUID
         elif func_name == "get_order_summary":
             tool_result = get_cart_summary(db, tenant_id, customer_id)
         elif func_name == "confirm_and_checkout_order":
-            tool_result = checkout_cart(db, tenant_id, customer_id)
+            tool_result = checkout_cart(
+                db, tenant_id, customer_id,
+                delivery_method=args.get("delivery_method", "DELIVERY"),
+                shipping_address=args.get("shipping_address")
+            )
         else:
             return None, None
             
@@ -109,15 +113,34 @@ async def run_conversational_agent(
     products_context = format_products_context(relevant_products)
     print(f"[IA] Búsqueda semántica (RAG) completada. Se encontraron {len(relevant_products)} productos relevantes para incluir en el contexto.")
 
+    # 2.5. Recuperar e inyectar documentos de la base de conocimiento entrenados (RAG)
+    kb_context = ""
+    trained_docs = db.query(KnowledgeDocument).filter(
+        and_(
+            KnowledgeDocument.tenant_id == tenant.id,
+            KnowledgeDocument.status == "TRAINED"
+        )
+    ).all()
+    if trained_docs:
+        kb_context = "\nINFORMACIÓN ADICIONAL DEL NEGOCIO (PREGUNTAS FRECUENTES, POLÍTICAS Y PROMOCIONES):\n"
+        for doc in trained_docs:
+            kb_context += f"--- Documento: {doc.title} (Tipo: {doc.type}) ---\n{doc.content}\n\n"
+
     # 3. Construir el prompt del sistema
     system_prompt = (
         f"{tenant.ai_system_prompt or 'Eres un asistente virtual de ventas amable.'}\n\n"
         f"CONTEXTO DE NEGOCIO Y STOCK ACTUAL:\n"
-        f"{products_context}\n\n"
-        f"REGLAS:\n"
-        f"- Basa tus respuestas EXCLUSIVAMENTE en el CONTEXTO DE NEGOCIO provisto arriba.\n"
+        f"{products_context}\n"
+        f"{kb_context}\n"
+        f"REGLAS OBLIGATORIAS:\n"
+        f"- Basa tus respuestas EXCLUSIVAMENTE en el CONTEXTO DE NEGOCIO y la INFORMACIÓN ADICIONAL provista arriba.\n"
         f"- Si el cliente te pide comprar o agregar productos, debes invocar la herramienta correspondiente (Function Calling).\n"
-        f"- Nunca inventes precios o stock. Si un producto no tiene stock, infórmalo educadamente."
+        f"- Nunca inventes precios o stock. Si un producto no tiene stock, infórmalo educadamente.\n"
+        f"- ANTES DE FINALIZAR O CONFIRMAR LA ORDEN (es decir, antes de llamar a 'confirm_and_checkout_order'), DEBES PREGUNTAR obligatoriamente al cliente lo siguiente:\n"
+        f"  1. ¿Desea entrega a domicilio ('DELIVERY') o retirar en el local ('PICKUP')?\n"
+        f"  2. Si el cliente elige a domicilio ('DELIVERY'), debes pedirle de forma obligatoria su dirección completa de entrega y/o su ubicación de WhatsApp.\n"
+        f"  3. Si elige retirar en el local ('PICKUP'), no requiere pedir dirección de envío.\n"
+        f"  Una vez que tengas definidos el método de entrega (y la dirección si eligió delivery), procede a llamar a la función 'confirm_and_checkout_order' con los parámetros correspondientes."
     )
 
     # 4. Alternativa de IA con Groq (Llama-3.3-70b-versatile)
@@ -176,8 +199,22 @@ async def run_conversational_agent(
                     "type": "function",
                     "function": {
                         "name": "confirm_and_checkout_order",
-                        "description": "Confirma el pedido final, bloquea el stock y cierra la compra.",
-                        "parameters": {"type": "object", "properties": {}}
+                        "description": "Confirma el pedido final, guarda el método de entrega y dirección física, y cierra la compra.",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "delivery_method": {
+                                    "type": "string",
+                                    "enum": ["DELIVERY", "PICKUP"],
+                                    "description": "Método de entrega seleccionado ('DELIVERY' para domicilio, 'PICKUP' para retirar en local)."
+                                },
+                                "shipping_address": {
+                                    "type": "string",
+                                    "description": "Dirección completa del cliente (obligatoria si delivery_method es 'DELIVERY')."
+                                }
+                            },
+                            "required": ["delivery_method"]
+                        }
                     }
                 }
             ]
@@ -235,7 +272,11 @@ async def run_conversational_agent(
                 elif function_name == "get_order_summary":
                     tool_result = get_cart_summary(db, tenant.id, customer_id)
                 elif function_name == "confirm_and_checkout_order":
-                    tool_result = checkout_cart(db, tenant.id, customer_id)
+                    tool_result = checkout_cart(
+                        db, tenant.id, customer_id,
+                        delivery_method=args.get("delivery_method", "DELIVERY"),
+                        shipping_address=args.get("shipping_address")
+                    )
                 else:
                     tool_result = "Función no implementada."
 
@@ -361,7 +402,11 @@ async def run_conversational_agent(
                 elif function_name == "get_order_summary":
                     tool_result = get_cart_summary(db, tenant.id, customer_id)
                 elif function_name == "confirm_and_checkout_order":
-                    tool_result = checkout_cart(db, tenant.id, customer_id)
+                    tool_result = checkout_cart(
+                        db, tenant.id, customer_id,
+                        delivery_method=args.get("delivery_method", "DELIVERY"),
+                        shipping_address=args.get("shipping_address")
+                    )
                 else:
                     tool_result = "Función no implementada."
 
@@ -421,8 +466,12 @@ def get_order_summary_tool() -> str:
     """
     pass
 
-def confirm_and_checkout_order_tool() -> str:
+def confirm_and_checkout_order_tool(delivery_method: str, shipping_address: str = None) -> str:
     """
-    Confirma el pedido final, bloquea el stock de productos y cierra la compra para iniciar el proceso de cobro.
+    Confirma el pedido final, guarda el método de entrega y la dirección, y cierra la compra.
+
+    Args:
+        delivery_method: El método de entrega elegido ('DELIVERY' para domicilio, 'PICKUP' para retirar en local).
+        shipping_address: Dirección de entrega completa (obligatoria si delivery_method es 'DELIVERY').
     """
     pass

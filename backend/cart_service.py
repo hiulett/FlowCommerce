@@ -145,10 +145,10 @@ def get_cart_summary(db: Session, tenant_id: uuid.UUID, customer_id: uuid.UUID) 
     summary += f"\nTOTAL DEL PEDIDO: ${order.total_amount}"
     return summary
 
-def checkout_cart(db: Session, tenant_id: uuid.UUID, customer_id: uuid.UUID) -> str:
+def checkout_cart(db: Session, tenant_id: uuid.UUID, customer_id: uuid.UUID, delivery_method: str = "DELIVERY", shipping_address: str = None) -> str:
     """
-    Confirma el pedido, descuenta físicamente el stock de los productos
-    y prepara la orden para el procesamiento del pago.
+    Confirma el pedido, descuenta físicamente el stock de los productos,
+    guarda el método de entrega y dirección, y prepara la orden para el procesamiento del pago.
     """
     order = db.query(Order).filter(
         and_(
@@ -168,7 +168,10 @@ def checkout_cart(db: Session, tenant_id: uuid.UUID, customer_id: uuid.UUID) -> 
             return f"Lo siento, la compra falló porque '{product.name}' ya no cuenta con suficiente stock (Disponibles: {product.stock}). Modifica tu carrito."
         product.stock -= item.quantity
 
-    # Actualizar estado a NEW para que aparezca en el tablero de pedidos
+    # Actualizar método de entrega, dirección y estado a NEW
+    order.delivery_method = delivery_method
+    if shipping_address:
+        order.shipping_address = shipping_address
     order.status = "NEW"
     db.commit()
 

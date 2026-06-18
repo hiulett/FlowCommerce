@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 // ─── Types ─────────────────────────────────────────────────────────────────────
 type TabKey = 'dashboard' | 'ai-knowledge' | 'chats' | 'orders' | 'customers' | 'settings' | 'super-tenants' | 'super-plans' | 'super-billing';
 type SettingsTab = 'business-profile' | 'team-management' | 'whatsapp-integration' | 'billing-security';
-type OrderStatus = 'NEW' | 'PREPARING' | 'READY' | 'DELIVERED';
+type OrderStatus = 'NEW' | 'CONFIRMED' | 'PREPARING' | 'READY' | 'SHIPPED' | 'DELIVERED';
 type CustomerStatus = 'ACTIVE' | 'INACTIVE';
 type DateFilter = 'today' | 'week' | 'month';
 type ModalKey =
@@ -24,6 +24,8 @@ interface Order {
   items: OrderItem[]; total: number; createdAt: Date;
   status: OrderStatus; notes?: string; paymentMethod: string;
   deliveredAt?: Date;
+  deliveryMethod?: 'DELIVERY' | 'PICKUP';
+  shippingAddress?: string;
 }
 interface Customer {
   id: string; name: string; phone: string; email?: string;
@@ -258,6 +260,29 @@ function DocumentModal({ document, onClose, onSave }: { document?:KBDocument; on
   const [content,setContent]=useState(document?.content??'');
   const [dragging,setDragging]=useState(false);
   const [tab,setTab]=useState<'text'|'file'>('text');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFile = (file: File) => {
+    if (!file) return;
+    const allowedExtensions = ['.txt', '.csv', '.json', '.md'];
+    const extension = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
+    if (!allowedExtensions.includes(extension)) {
+      alert("Formato de archivo no compatible directo en navegador. Por favor suba archivos de texto (.txt, .csv, .md, .json) o copie y pegue su contenido para cargarlo.");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const text = e.target?.result as string;
+      setContent(text);
+      if (!title) {
+        setTitle(file.name.substring(0, file.name.lastIndexOf('.')));
+      }
+      setTab('text'); // Regresar a la pestaña de texto para permitir revisión
+    };
+    reader.readAsText(file);
+  };
+
   return (
     <Modal onClose={onClose} size="modal-lg">
       <ModalHeader icon={document?'edit_document':'upload_file'} iconColor="indigo" title={document?'Editar Documento':'Cargar Documento'} subtitle="El agente IA aprenderá de este contenido" onClose={onClose}/>
@@ -286,14 +311,38 @@ function DocumentModal({ document, onClose, onSave }: { document?:KBDocument; on
             <div className="form-hint">{content.split(' ').filter(Boolean).length} palabras</div>
           </div>
         ):(
-          <div className={`drop-zone${dragging?' dragging':''}`} onDragOver={e=>{e.preventDefault();setDragging(true);}} onDragLeave={()=>setDragging(false)} onDrop={e=>{e.preventDefault();setDragging(false);}}>
+          <div 
+            className={`drop-zone${dragging?' dragging':''}`} 
+            onDragOver={e=>{e.preventDefault();setDragging(true);}} 
+            onDragLeave={()=>setDragging(false)} 
+            onDrop={e=>{
+              e.preventDefault();
+              setDragging(false);
+              if(e.dataTransfer.files && e.dataTransfer.files[0]) {
+                handleFile(e.dataTransfer.files[0]);
+              }
+            }}
+            style={{cursor:'pointer'}}
+            onClick={()=>fileInputRef.current?.click()}
+          >
+            <input 
+              type="file" 
+              ref={fileInputRef} 
+              onChange={e=>{
+                if(e.target.files && e.target.files[0]) {
+                  handleFile(e.target.files[0]);
+                }
+              }} 
+              style={{display:'none'}} 
+              accept=".txt,.csv,.json,.md"
+            />
             <MI name="cloud_upload" style={{fontSize:48,color:'var(--color-secondary-container)',display:'block',textAlign:'center',marginBottom:12}}/>
-            <div style={{fontWeight:700,fontSize:15,marginBottom:6}}>Arrastra tu archivo aquí</div>
-            <div style={{fontSize:13,color:'var(--color-on-surface-variant)',marginBottom:16}}>Compatible con .pdf, .docx, .txt, .csv</div>
-            <button className="btn btn-outline"><MI name="folder_open"/>Buscar Archivo</button>
+            <div style={{fontWeight:700,fontSize:15,marginBottom:6}}>Arrastra tu archivo aquí o haz clic para buscar</div>
+            <div style={{fontSize:13,color:'var(--color-on-surface-variant)',marginBottom:16}}>Compatible con .txt, .csv, .md, .json</div>
+            <button className="btn btn-outline" type="button" style={{margin:'0 auto',display:'block'}}><MI name="folder_open"/>Buscar Archivo</button>
           </div>
         )}
-        <div className="inline-alert alert-info" style={{marginTop:16}}><MI name="psychology"/><span>El entrenamiento se ejecutará automáticamente. Tiempo estimado: <strong>2-5 min</strong>.</span></div>
+        <div className="inline-alert alert-info" style={{marginTop:16}}><MI name="psychology"/><span>El entrenamiento se ejecutará automáticamente al guardar. Tiempo estimado: <strong>1-2 min</strong>.</span></div>
       </div>
       <div className="modal-footer">
         <button className="btn btn-outline" onClick={onClose}>Cancelar</button>
@@ -1747,12 +1796,12 @@ function AIKnowledgeView({ showToast, searchQuery }: { showToast:(m:string,t?:To
 }
 
 // ── Orders View ────────────────────────────────────────────────────────────────
-function OrdersView({ orders, delivered, onStartPreparing, onMarkReady, onDeliver, showToast, searchQuery }: { orders:Order[]; delivered:Order[]; onStartPreparing:(id:string)=>void; onMarkReady:(id:string)=>void; onDeliver:(id:string)=>void; showToast:(m:string,t?:ToastMsg['type'])=>void; searchQuery:string }) {
+function OrdersView({ orders, delivered, onUpdateOrderStatus, simulatingOrders, setSimulatingOrders, showToast, searchQuery }: { orders:Order[]; delivered:Order[]; onUpdateOrderStatus:(id:string,status:OrderStatus)=>void; simulatingOrders:boolean; setSimulatingOrders:(v:boolean)=>void; showToast:(m:string,t?:ToastMsg['type'])=>void; searchQuery:string }) {
   const [view,setView]=useState<'kanban'|'table'|'history'>('kanban');
   const [filterStatus,setFilterStatus]=useState('ALL');
   const [selectedOrder,setSelectedOrder]=useState<Order|null>(null);
   const getMin=(d:Date)=>Math.floor((Date.now()-d.getTime())/60000);
-  const exportOrders=()=>{downloadCSV('pedidos_nexus.csv',[['ID','Cliente','Teléfono','Productos','Total','Pago','Estado','Fecha'],...orders.map(o=>[o.id,o.customerName,o.phone,o.items.map(i=>`${i.quantity}x${i.name}`).join('; '),o.total.toFixed(2),o.paymentMethod,STATUS_LABEL[o.status],o.createdAt.toLocaleString('es-CO')])]);showToast('CSV exportado correctamente','success');};
+  const exportOrders=()=>{downloadCSV('pedidos_nexus.csv',[['ID','Cliente','Teléfono','Método','Dirección','Productos','Total','Pago','Estado','Fecha'],...orders.map(o=>[o.id,o.customerName,o.phone,o.deliveryMethod==='PICKUP'?'Retiro Local':'Domicilio',o.shippingAddress||'-',o.items.map(i=>`${i.quantity}x${i.name}`).join('; '),o.total.toFixed(2),o.paymentMethod,STATUS_LABEL[o.status],o.createdAt.toLocaleString('es-CO')])]);showToast('CSV exportado correctamente','success');};
 
   const filterBySearch = (o: Order) => {
     if (!searchQuery) return true;
@@ -1760,7 +1809,8 @@ function OrdersView({ orders, delivered, onStartPreparing, onMarkReady, onDelive
     return o.customerName.toLowerCase().includes(q) ||
            o.id.includes(q) ||
            o.items.some(i => i.name.toLowerCase().includes(q)) ||
-           o.phone.includes(q);
+           o.phone.includes(q) ||
+           (o.shippingAddress && o.shippingAddress.toLowerCase().includes(q));
   };
   const filteredOrders = orders.filter(filterBySearch);
   const filteredDelivered = delivered.filter(filterBySearch);
@@ -1770,6 +1820,10 @@ function OrdersView({ orders, delivered, onStartPreparing, onMarkReady, onDelive
       <div className="page-header">
         <div className="page-header-title"><h2>Gestión de Pedidos</h2><p><MI name="chat"/>{orders.length} activos · {delivered.length} entregados hoy</p></div>
         <div className="page-header-actions">
+          <label className="toggle-switch" style={{display:'inline-flex',alignItems:'center',gap:8,cursor:'pointer',fontSize:13,marginRight:16,padding:'6px 12px',borderRadius:8,background:'var(--color-surface-container)',border:'1px solid var(--color-outline-variant)'}}>
+            <input type="checkbox" checked={simulatingOrders} onChange={e=>setSimulatingOrders(e.target.checked)} style={{cursor:'pointer'}}/>
+            <span style={{fontWeight:600}}>{simulatingOrders ? '🟢 Simulador Activo' : '🔴 Simulador Pausado'}</span>
+          </label>
           <button className={`btn ${view==='kanban'?'btn-primary':'btn-outline'}`} onClick={()=>setView('kanban')}><MI name="view_kanban"/>KDS</button>
           <button className={`btn ${view==='table'?'btn-primary':'btn-outline'}`} onClick={()=>setView('table')}><MI name="table_rows"/>Tabla</button>
           <button className={`btn ${view==='history'?'btn-primary':'btn-outline'}`} onClick={()=>setView('history')}><MI name="history"/>Historial</button>
@@ -1777,36 +1831,69 @@ function OrdersView({ orders, delivered, onStartPreparing, onMarkReady, onDelive
         </div>
       </div>
       {view==='kanban'&&(
-        <div className="kds-board">
-          {(['NEW','PREPARING','READY'] as OrderStatus[]).map((col,ci)=>{
+        <div className="kds-board" style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:12,overflowX:'auto',paddingBottom:10}}>
+          {(['NEW','CONFIRMED','PREPARING','READY','SHIPPED'] as OrderStatus[]).map((col,ci)=>{
             const colO=filteredOrders.filter(o=>o.status===col);
-            const colors=['#1a146b','#312e81','var(--color-whatsapp-green)'];
-            const titles=['Nuevos','En Preparación','Listos / Despacho'];
+            const colors=['#475569','#4f46e5','#0891b2','#059669','#ea580c'];
+            const titles=['Nuevos','Confirmados','En Preparación','Listo / Despacho','En Camino'];
             return (
-              <div key={col} className="kds-column">
-                <div className="kds-column-header"><h3>{titles[ci]}</h3><span className="kds-column-count" style={{background:colors[ci]}}>{colO.length}</span></div>
+              <div key={col} className="kds-column" style={{minWidth:220}}>
+                <div className="kds-column-header" style={{borderTop:`4px solid ${colors[ci]}`}}><h3>{titles[ci]}</h3><span className="kds-column-count" style={{background:colors[ci]}}>{colO.length}</span></div>
                 <div className="kds-cards">
                   {colO.map(order=>{
                     const elapsed=getMin(order.createdAt);
                     const isRed=col==='PREPARING'&&elapsed>=25;
                     const isYellow=col==='PREPARING'&&elapsed>=15&&elapsed<25;
+                    const isPickup=order.deliveryMethod==='PICKUP';
                     return (
-                      <div key={order.id} className={`order-card${isRed?' alert-critical':isYellow?' alert-warning':''}`}>
+                      <div key={order.id} className={`order-card${isRed?' alert-critical':isYellow?' alert-warning':''}`} style={{borderLeft:isPickup?'4px solid #8b5cf6':'1px solid var(--color-outline-variant)'}}>
                         {isRed&&<div className="alert-banner"><MI name="warning"/>DEMORA CRÍTICA (+25 min)</div>}
                         <div className="order-header">
-                          <div><div className="order-id" style={{cursor:'pointer'}} onClick={()=>setSelectedOrder(order)}>#{order.id}</div><div className="order-customer">{order.customerName}</div></div>
+                          <div>
+                            <div className="order-id" style={{cursor:'pointer'}} onClick={()=>setSelectedOrder(order)}>#{order.id}</div>
+                            <div className="order-customer">{order.customerName}</div>
+                          </div>
                           <span className={`order-timer ${isRed?'timer-critical':isYellow?'timer-warning':'timer-normal'}`}><MI name="schedule"/>{elapsed} min</span>
                         </div>
-                        <div className="order-products"><div className="order-products-label">Productos</div>{order.items.map((it,i)=><div key={i} className="order-product-item" style={col==='READY'?{textDecoration:'line-through',color:'var(--color-outline)'}:{}}>{it.quantity}× {it.name}</div>)}</div>
+                        
+                        <div style={{marginBottom:8}}>
+                          {isPickup ? (
+                            <span className="badge" style={{background:'#f3e8ff',color:'#6b21a8',fontWeight:700,fontSize:10,padding:'2px 6px',borderRadius:4,display:'inline-flex',alignItems:'center',gap:4}}><MI name="store" style={{fontSize:12}}/>RETIRO LOCAL</span>
+                          ) : (
+                            <span className="badge" style={{background:'#dbeafe',color:'#1e3a8a',fontWeight:700,fontSize:10,padding:'2px 6px',borderRadius:4,display:'inline-flex',alignItems:'center',gap:4}}><MI name="local_shipping" style={{fontSize:12}}/>DOMICILIO</span>
+                          )}
+                        </div>
+
+                        <div className="order-products">
+                          <div className="order-products-label">Productos</div>
+                          {order.items.map((it,i)=><div key={i} className="order-product-item" style={(col==='READY'||col==='SHIPPED')?{textDecoration:'line-through',color:'var(--color-outline)'}:{}}>{it.quantity}× {it.name}</div>)}
+                        </div>
+
+                        {order.shippingAddress && (
+                          <div style={{fontSize:11,background:'var(--color-surface-container)',padding:'6px 8px',borderRadius:6,color:'var(--color-on-surface-variant)',marginBottom:8,lineHeight:'1.3'}}>
+                            <strong style={{fontSize:10,textTransform:'uppercase',color:'var(--color-outline)',display:'block'}}>Dirección:</strong>
+                            {order.shippingAddress}
+                          </div>
+                        )}
+
                         {order.notes&&<div className="order-note"><strong>🤖 IA: </strong>{order.notes}</div>}
-                        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><span style={{fontWeight:700,fontSize:14,color:'var(--color-primary)'}}>${order.total.toFixed(2)}</span><span className="badge badge-new" style={{fontSize:11}}>{order.paymentMethod}</span></div>
-                        {col==='NEW'&&<button className="btn btn-secondary" style={{width:'100%',padding:'10px'}} onClick={()=>onStartPreparing(order.id)}><MI name="restaurant"/>INICIAR PREPARACIÓN</button>}
-                        {col==='PREPARING'&&<button className="btn btn-success" style={{width:'100%',padding:'10px'}} onClick={()=>onMarkReady(order.id)}><MI name="done_all"/>MARCAR COMO LISTO</button>}
-                        {col==='READY'&&<button className="btn btn-primary" style={{width:'100%',padding:'10px'}} onClick={()=>onDeliver(order.id)}><MI name="local_shipping"/>MARCAR ENTREGADO</button>}
+                        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}><span style={{fontWeight:700,fontSize:14,color:'var(--color-primary)'}}>${order.total.toFixed(2)}</span><span className="badge badge-new" style={{fontSize:11}}>{order.paymentMethod}</span></div>
+                        
+                        {col==='NEW'&&<button className="btn btn-secondary" style={{width:'100%',padding:'8px',fontSize:12,display:'flex',justifyContent:'center',alignItems:'center',gap:4}} onClick={()=>onUpdateOrderStatus(order.id,'CONFIRMED')}><MI name="call" style={{fontSize:16}}/>CONFIRMAR LLAMADA</button>}
+                        {col==='CONFIRMED'&&<button className="btn btn-primary" style={{width:'100%',padding:'8px',fontSize:12,display:'flex',justifyContent:'center',alignItems:'center',gap:4}} onClick={()=>onUpdateOrderStatus(order.id,'PREPARING')}><MI name="restaurant" style={{fontSize:16}}/>INICIAR PREPARACIÓN</button>}
+                        {col==='PREPARING'&&<button className="btn btn-success" style={{width:'100%',padding:'8px',fontSize:12,display:'flex',justifyContent:'center',alignItems:'center',gap:4}} onClick={()=>onUpdateOrderStatus(order.id,'READY')}><MI name="done_all" style={{fontSize:16}}/>MARCAR COMO LISTO</button>}
+                        {col==='READY'&&(
+                          isPickup ? (
+                            <button className="btn btn-secondary" style={{width:'100%',padding:'8px',fontSize:12,display:'flex',justifyContent:'center',alignItems:'center',gap:4,background:'#7c3aed',color:'white'}} onClick={()=>onUpdateOrderStatus(order.id,'DELIVERED')}><MI name="person" style={{fontSize:16}}/>ENTREGAR A CLIENTE</button>
+                          ) : (
+                            <button className="btn btn-primary" style={{width:'100%',padding:'8px',fontSize:12,display:'flex',justifyContent:'center',alignItems:'center',gap:4}} onClick={()=>onUpdateOrderStatus(order.id,'SHIPPED')}><MI name="local_shipping" style={{fontSize:16}}/>DESPACHAR / ENVIAR</button>
+                          )
+                        )}
+                        {col==='SHIPPED'&&<button className="btn btn-success" style={{width:'100%',padding:'8px',fontSize:12,display:'flex',justifyContent:'center',alignItems:'center',gap:4}} onClick={()=>onUpdateOrderStatus(order.id,'DELIVERED')}><MI name="check_circle" style={{fontSize:16}}/>MARCAR ENTREGADO</button>}
                       </div>
                     );
                   })}
-                  {colO.length===0&&<div style={{textAlign:'center',padding:'32px 16px',color:'var(--color-outline)'}}><MI name="check_circle" style={{fontSize:32,color:'var(--color-success-emerald)',display:'block',marginBottom:8}}/><div style={{fontSize:13}}>Sin pedidos</div></div>}
+                  {colO.length===0&&<div style={{textAlign:'center',padding:'32px 16px',color:'var(--color-outline)'}}><MI name="check_circle" style={{fontSize:24,color:'var(--color-success-emerald)',display:'block',marginBottom:8}}/><div style={{fontSize:11}}>Sin pedidos</div></div>}
                 </div>
               </div>
             );
@@ -1816,24 +1903,34 @@ function OrdersView({ orders, delivered, onStartPreparing, onMarkReady, onDelive
       {view==='table'&&(
         <div>
           <div className="filter-bar">
-            <div className="filter-select-wrap"><MI name="filter_list" style={{position:'absolute',left:10,top:'50%',transform:'translateY(-50%)',fontSize:16,color:'var(--color-outline)'}}/><select className="filter-select" value={filterStatus} onChange={e=>setFilterStatus(e.target.value)}><option value="ALL">Todos</option><option value="NEW">Nuevos</option><option value="PREPARING">Preparando</option><option value="READY">Listos</option></select></div>
+            <div className="filter-select-wrap"><MI name="filter_list" style={{position:'absolute',left:10,top:'50%',transform:'translateY(-50%)',fontSize:16,color:'var(--color-outline)'}}/><select className="filter-select" value={filterStatus} onChange={e=>setFilterStatus(e.target.value)}><option value="ALL">Todos</option><option value="NEW">Nuevos</option><option value="CONFIRMED">Confirmados</option><option value="PREPARING">Preparando</option><option value="READY">Listos</option><option value="SHIPPED">En Camino</option></select></div>
             <div className="auto-sync-badge"><MI name="sync"/>Auto-sync activo</div>
           </div>
           <div className="data-table-wrapper">
             <table className="data-table">
-              <thead><tr><th>ID</th><th>Cliente</th><th>Productos</th><th style={{textAlign:'right'}}>Total</th><th>Pago</th><th>Estado</th><th style={{textAlign:'right'}}>Acciones</th></tr></thead>
+              <thead><tr><th>ID</th><th>Cliente</th><th>Método</th><th>Dirección</th><th>Productos</th><th style={{textAlign:'right'}}>Total</th><th>Pago</th><th>Estado</th><th style={{textAlign:'right'}}>Acciones</th></tr></thead>
               <tbody>{filteredOrders.filter(o=>filterStatus==='ALL'||o.status===filterStatus).map(o=>(
                 <tr key={o.id} style={{cursor:'pointer'}} onClick={()=>setSelectedOrder(o)}>
                   <td><span className="font-mono" style={{color:'var(--color-primary)',fontWeight:700}}>#{o.id}</span></td>
                   <td><div style={{display:'flex',alignItems:'center',gap:10}}><div style={{width:34,height:34,borderRadius:'50%',background:'#e2dfff',color:'var(--color-primary)',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,fontSize:12,flexShrink:0}}>{getInitials(o.customerName)}</div><div style={{fontWeight:600}}>{o.customerName}</div></div></td>
+                  <td><span style={{fontSize:12,fontWeight:600}}>{o.deliveryMethod === 'PICKUP' ? '🛍️ Retiro Local' : '🛵 Domicilio'}</span></td>
+                  <td style={{fontSize:11,maxWidth:180,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{o.shippingAddress || '-'}</td>
                   <td style={{fontSize:12,color:'var(--color-on-surface-variant)'}}>{o.items.map(i=>`${i.quantity}× ${i.name}`).join(', ')}</td>
                   <td style={{textAlign:'right',fontWeight:700}}>${o.total.toFixed(2)}</td>
                   <td><span className="badge badge-new">{o.paymentMethod}</span></td>
                   <td><span className={`badge ${STATUS_BADGE[o.status]}`}>{STATUS_LABEL[o.status]}</span></td>
                   <td style={{textAlign:'right'}} onClick={e=>e.stopPropagation()}><div style={{display:'flex',gap:6,justifyContent:'flex-end'}}>
-                    {o.status==='NEW'&&<button className="btn btn-secondary" style={{padding:'5px 12px',fontSize:11}} onClick={()=>onStartPreparing(o.id)}>Preparar</button>}
-                    {o.status==='PREPARING'&&<button className="btn btn-success" style={{padding:'5px 12px',fontSize:11}} onClick={()=>onMarkReady(o.id)}>Listo</button>}
-                    {o.status==='READY'&&<button className="btn btn-primary" style={{padding:'5px 12px',fontSize:11}} onClick={()=>onDeliver(o.id)}>Entregar</button>}
+                    {o.status==='NEW'&&<button className="btn btn-secondary" style={{padding:'5px 12px',fontSize:11}} onClick={()=>onUpdateOrderStatus(o.id,'CONFIRMED')}>Confirmar</button>}
+                    {o.status==='CONFIRMED'&&<button className="btn btn-primary" style={{padding:'5px 12px',fontSize:11}} onClick={()=>onUpdateOrderStatus(o.id,'PREPARING')}>Preparar</button>}
+                    {o.status==='PREPARING'&&<button className="btn btn-success" style={{padding:'5px 12px',fontSize:11}} onClick={()=>onUpdateOrderStatus(o.id,'READY')}>Listo</button>}
+                    {o.status==='READY'&&(
+                      o.deliveryMethod==='PICKUP' ? (
+                        <button className="btn btn-secondary" style={{padding:'5px 12px',fontSize:11,background:'#7c3aed',color:'white'}} onClick={()=>onUpdateOrderStatus(o.id,'DELIVERED')}>Entregar</button>
+                      ) : (
+                        <button className="btn btn-primary" style={{padding:'5px 12px',fontSize:11}} onClick={()=>onUpdateOrderStatus(o.id,'SHIPPED')}>Despachar</button>
+                      )
+                    )}
+                    {o.status==='SHIPPED'&&<button className="btn btn-success" style={{padding:'5px 12px',fontSize:11}} onClick={()=>onUpdateOrderStatus(o.id,'DELIVERED')}>Entregado</button>}
                   </div></td>
                 </tr>
               ))}</tbody>
@@ -2971,6 +3068,7 @@ export default function App({ user, onLogout }: { user:{name:string;email:string
   },[]);
   const dismissToast=useCallback((id:number)=>setToasts(p=>p.filter(t=>t.id!==id)),[]);
 
+  const [simulatingOrders, setSimulatingOrders] = useState<boolean>(true);
   const [orders,setOrders]=useState<Order[]>([]);
 
   useEffect(() => {
@@ -2982,7 +3080,9 @@ export default function App({ user, onLogout }: { user:{name:string;email:string
       .then(data => {
         const mapped = data.map((o: any) => ({
           ...o,
-          createdAt: new Date(o.createdAt)
+          createdAt: new Date(o.createdAt),
+          deliveryMethod: o.deliveryMethod || o.delivery_method || 'DELIVERY',
+          shippingAddress: o.shippingAddress || o.shipping_address
         }));
         setOrders(mapped.filter((o: any) => o.status !== 'DELIVERED'));
         setDelivered(mapped.filter((o: any) => o.status === 'DELIVERED'));
@@ -2991,71 +3091,57 @@ export default function App({ user, onLogout }: { user:{name:string;email:string
   }, [user.role]);
 
   useEffect(()=>{
-    if (user.role === 'SUPER_ADMIN') return;
+    if (user.role === 'SUPER_ADMIN' || !simulatingOrders) return;
     const sim=setInterval(()=>{
       const names=['Patricia Rojas','Roberto Díaz','Ana Martínez','Felipe Torres'];
       const products=['Pizza Hawaiana','Combo Familiar','Alitas x6','Hamburguesa Clásica'];
       const methods=['WhatsApp Pay','Efectivo','QR'];
       const product=products[Math.floor(Math.random()*products.length)];
       const price=parseFloat((8+Math.random()*20).toFixed(2));
-      const newOrder:Order={id:Math.floor(1050+Math.random()*900).toString(),customerName:names[Math.floor(Math.random()*names.length)],phone:'57300'+Math.floor(1000000+Math.random()*9000000),paymentMethod:methods[Math.floor(Math.random()*methods.length)],items:[{name:product,quantity:1,price}],total:price,createdAt:new Date(),status:'NEW'};
+      const deliveryMethod = Math.random() > 0.5 ? 'DELIVERY' : 'PICKUP';
+      const address = deliveryMethod === 'DELIVERY' ? 'Calle ' + Math.floor(10+Math.random()*90) + ' # ' + Math.floor(1+Math.random()*90) + '-' + Math.floor(1+Math.random()*90) : undefined;
+      const newOrder:Order={
+        id:Math.floor(1050+Math.random()*900).toString(),
+        customerName:names[Math.floor(Math.random()*names.length)],
+        phone:'57300'+Math.floor(1000000+Math.random()*9000000),
+        paymentMethod:methods[Math.floor(Math.random()*methods.length)],
+        items:[{name:product,quantity:1,price}],
+        total:price,
+        createdAt:new Date(),
+        status:'NEW',
+        deliveryMethod,
+        shippingAddress:address
+      };
       setOrders(p=>[...p,newOrder]);
-      showToast(`Nuevo pedido #${newOrder.id} de ${newOrder.customerName}`,'info');
+      showToast(`Nuevo pedido #${newOrder.id} de ${newOrder.customerName} (${deliveryMethod === 'DELIVERY' ? 'Domicilio' : 'Retiro'})`,'info');
       setNotifs(p=>[{id:`N${Date.now()}`,title:`Nuevo pedido #${newOrder.id}`,desc:`${newOrder.customerName} ordenó ${product} — $${price}`,time:'Ahora',type:'order',read:false},...p]);
       try{const ctx=new(window.AudioContext||(window as any).webkitAudioContext)();const osc=ctx.createOscillator();const gain=ctx.createGain();osc.connect(gain);gain.connect(ctx.destination);osc.frequency.setValueAtTime(880,ctx.currentTime);gain.gain.setValueAtTime(0.08,ctx.currentTime);osc.start();osc.stop(ctx.currentTime+0.12);}catch{}
     },45000);
     return ()=>clearInterval(sim);
-  },[showToast, user.role]);
+  },[showToast, user.role, simulatingOrders]);
 
-  const handleStartPreparing = (id: string) => {
+  const handleUpdateOrderStatus = (id: string, nextStatus: OrderStatus) => {
     fetch(`${API_BASE_URL}/api/tenant/orders/${id}/status`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
         'X-Tenant-ID': '40446806-0107-6201-9310-c9943efb3870'
       },
-      body: JSON.stringify({ status: 'PREPARING' })
+      body: JSON.stringify({ status: nextStatus })
     })
       .then(res => res.json())
       .then(() => {
-        setOrders(p => p.map(o => o.id === id ? { ...o, status: 'PREPARING', createdAt: new Date() } : o));
-      })
-      .catch(err => console.error("Error updating order status:", err));
-  };
-
-  const handleMarkReady = (id: string) => {
-    fetch(`${API_BASE_URL}/api/tenant/orders/${id}/status`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Tenant-ID': '40446806-0107-6201-9310-c9943efb3870'
-      },
-      body: JSON.stringify({ status: 'READY' })
-    })
-      .then(res => res.json())
-      .then(() => {
-        setOrders(p => p.map(o => o.id === id ? { ...o, status: 'READY' } : o));
-      })
-      .catch(err => console.error("Error updating order status:", err));
-  };
-
-  const handleDeliver = (id: string) => {
-    fetch(`${API_BASE_URL}/api/tenant/orders/${id}/status`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Tenant-ID': '40446806-0107-6201-9310-c9943efb3870'
-      },
-      body: JSON.stringify({ status: 'DELIVERED' })
-    })
-      .then(res => res.json())
-      .then(() => {
-        const order = orders.find(o => o.id === id);
-        if (order) {
-          setDelivered(p => [{ ...order, status: 'DELIVERED', deliveredAt: new Date() } as any, ...p]);
+        if (nextStatus === 'DELIVERED') {
+          const order = orders.find(o => o.id === id);
+          if (order) {
+            setDelivered(p => [{ ...order, status: 'DELIVERED', deliveredAt: new Date() }, ...p]);
+          }
+          setOrders(p => p.filter(o => o.id !== id));
+          showToast('Pedido marcado como entregado', 'success');
+        } else {
+          setOrders(p => p.map(o => o.id === id ? { ...o, status: nextStatus, ...(nextStatus === 'PREPARING' ? { createdAt: new Date() } : {}) } : o));
+          showToast(`Pedido actualizado a: ${STATUS_LABEL[nextStatus]}`, 'success');
         }
-        setOrders(p => p.filter(o => o.id !== id));
-        showToast('Pedido marcado como entregado', 'success');
       })
       .catch(err => console.error("Error updating order status:", err));
   };
@@ -3204,7 +3290,7 @@ export default function App({ user, onLogout }: { user:{name:string;email:string
               {activeTab==='dashboard'    &&<DashboardView orders={[...orders, ...delivered]} showToast={showToast} searchQuery={searchQuery}/>}
               {activeTab==='ai-knowledge' &&<AIKnowledgeView showToast={showToast} searchQuery={searchQuery}/>}
               {activeTab==='chats'        &&<ChatsView showToast={showToast} searchQuery={searchQuery}/>}
-              {activeTab==='orders'       &&<OrdersView orders={orders} delivered={delivered} onStartPreparing={handleStartPreparing} onMarkReady={handleMarkReady} onDeliver={handleDeliver} showToast={showToast} searchQuery={searchQuery}/>}
+              {activeTab==='orders'       &&<OrdersView orders={orders} delivered={delivered} onUpdateOrderStatus={handleUpdateOrderStatus} simulatingOrders={simulatingOrders} setSimulatingOrders={setSimulatingOrders} showToast={showToast} searchQuery={searchQuery}/>}
               {activeTab==='customers'    &&<CustomersView showToast={showToast} searchQuery={searchQuery}/>}
               {activeTab==='settings'     &&<SettingsView showToast={showToast}/>}
             </>

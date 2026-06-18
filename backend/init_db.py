@@ -150,8 +150,8 @@ def init_database():
             p5 = db.query(Product).filter(Product.tenant_id == nexus_id, Product.name == "Alitas BBQ x12").first()
             p6 = db.query(Product).filter(Product.tenant_id == nexus_id, Product.name == "Pizza Margherita").first()
 
-            # Pedido 1042
-            o1042 = Order(id=uuid.UUID("00000000-0000-0000-0000-000000001042"), tenant_id=nexus_id, customer_id=cust_isaac.id, status="PREPARING", total_amount=18.49)
+            # Pedido 1042 (PREPARING, DELIVERY)
+            o1042 = Order(id=uuid.UUID("00000000-0000-0000-0000-000000001042"), tenant_id=nexus_id, customer_id=cust_isaac.id, status="PREPARING", delivery_method="DELIVERY", shipping_address="Calle 50 # 12-34", total_amount=18.49)
             db.add(o1042)
             db.commit()
             db.add_all([
@@ -160,8 +160,8 @@ def init_database():
                 Payment(tenant_id=nexus_id, order_id=o1042.id, gateway="WhatsApp Pay", status="COMPLETED")
             ])
             
-            # Pedido 1043
-            o1043 = Order(id=uuid.UUID("00000000-0000-0000-0000-000000001043"), tenant_id=nexus_id, customer_id=cust_laura.id, status="PREPARING", total_amount=23.00)
+            # Pedido 1043 (CONFIRMED, DELIVERY)
+            o1043 = Order(id=uuid.UUID("00000000-0000-0000-0000-000000001043"), tenant_id=nexus_id, customer_id=cust_laura.id, status="CONFIRMED", delivery_method="DELIVERY", shipping_address="Av. Santander # 45-89", total_amount=23.00)
             db.add(o1043)
             db.commit()
             db.add_all([
@@ -170,8 +170,8 @@ def init_database():
                 Payment(tenant_id=nexus_id, order_id=o1043.id, gateway="Efectivo", status="PENDING")
             ])
 
-            # Pedido 1044
-            o1044 = Order(id=uuid.UUID("00000000-0000-0000-0000-000000001044"), tenant_id=nexus_id, customer_id=cust_carlos.id, status="NEW", total_amount=11.00)
+            # Pedido 1044 (NEW, PICKUP)
+            o1044 = Order(id=uuid.UUID("00000000-0000-0000-0000-000000001044"), tenant_id=nexus_id, customer_id=cust_carlos.id, status="NEW", delivery_method="PICKUP", total_amount=11.00)
             db.add(o1044)
             db.commit()
             db.add_all([
@@ -179,13 +179,22 @@ def init_database():
                 Payment(tenant_id=nexus_id, order_id=o1044.id, gateway="QR", status="COMPLETED")
             ])
 
-            # Pedido 1041
-            o1041 = Order(id=uuid.UUID("00000000-0000-0000-0000-000000001041"), tenant_id=nexus_id, customer_id=cust_sofia.id, status="READY", total_amount=12.50)
+            # Pedido 1041 (READY, PICKUP)
+            o1041 = Order(id=uuid.UUID("00000000-0000-0000-0000-000000001041"), tenant_id=nexus_id, customer_id=cust_sofia.id, status="READY", delivery_method="PICKUP", total_amount=12.50)
             db.add(o1041)
             db.commit()
             db.add_all([
                 OrderItem(order_id=o1041.id, product_id=p6.id, quantity=1, price=12.50),
                 Payment(tenant_id=nexus_id, order_id=o1041.id, gateway="WhatsApp Pay", status="COMPLETED")
+            ])
+
+            # Pedido 1045 (SHIPPED, DELIVERY)
+            o1045 = Order(id=uuid.UUID("00000000-0000-0000-0000-000000001045"), tenant_id=nexus_id, customer_id=cust_isaac.id, status="SHIPPED", delivery_method="DELIVERY", shipping_address="Transversal 23 # 9A-12", total_amount=14.99)
+            db.add(o1045)
+            db.commit()
+            db.add_all([
+                OrderItem(order_id=o1045.id, product_id=p1.id, quantity=1, price=14.99),
+                Payment(tenant_id=nexus_id, order_id=o1045.id, gateway="WhatsApp Pay", status="COMPLETED")
             ])
             db.commit()
             print("Pedidos sembrados.")

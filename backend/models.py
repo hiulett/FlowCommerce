@@ -90,6 +90,7 @@ class Order(Base):
     shipping_address = Column(Text, nullable=True)
     latitude = Column(Numeric(9, 6), nullable=True)
     longitude = Column(Numeric(9, 6), nullable=True)
+    delivery_method = Column(String(30), nullable=True, default="DELIVERY") # 'DELIVERY' o 'PICKUP'
     created_at = Column(DateTime, default=datetime.utcnow)
 
     tenant = relationship("Tenant", back_populates="orders")
