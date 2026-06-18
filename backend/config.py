@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     GROQ_API_KEY: Optional[str] = None
     LLM_MODEL: Optional[str] = None
     
+    # Ollama (modelo local / VPS)
+    OLLAMA_BASE_URL: str = "http://localhost:11434/v1"
+    
     # Seguridad
     SECRET_KEY: str = "super_secret_jwt_signing_key_change_me_in_production"
     ALGORITHM: str = "HS256"

@@ -693,7 +693,7 @@ async def run_conversational_agent(
                 import json
 
                 client = OpenAI(
-                    base_url="http://localhost:11434/v1",
+                    base_url=settings.OLLAMA_BASE_URL,
                     api_key="ollama"
                 )
                 
