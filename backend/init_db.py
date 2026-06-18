@@ -212,6 +212,29 @@ def init_database():
             db.commit()
             print("Base de conocimientos sembrada.")
 
+        # Sembrar productos/catálogo para Demo Bakery
+        bakery_id = uuid.UUID("40446806-0107-6201-9310-c9943efb3874")
+        if db.query(Product).filter(Product.tenant_id == bakery_id).count() == 0:
+            print("Sembrando catálogo de productos para Demo Bakery...")
+            bp1 = Product(id=uuid.UUID("d01d5c5f-cfd7-4632-9c1b-f8a1e80ad801"), tenant_id=bakery_id, name="Croissant de Mantequilla", description="Croissant de hojaldre crujiente hecho con mantequilla pura", price=2.50, stock=25)
+            bp2 = Product(id=uuid.UUID("d01d5c5f-cfd7-4632-9c1b-f8a1e80ad802"), tenant_id=bakery_id, name="Tarta de Manzana", description="Deliciosa tarta de manzana con canela y masa sablé", price=4.00, stock=10)
+            bp3 = Product(id=uuid.UUID("d01d5c5f-cfd7-4632-9c1b-f8a1e80ad803"), tenant_id=bakery_id, name="Baguette Rústico", description="Pan tradicional francés de corteza crujiente y miga alveolada", price=3.00, stock=15)
+            bp4 = Product(id=uuid.UUID("d01d5c5f-cfd7-4632-9c1b-f8a1e80ad804"), tenant_id=bakery_id, name="Pan de Chocolate", description="Pan dulce relleno de chocolate belga premium", price=2.80, stock=20)
+            db.add_all([bp1, bp2, bp3, bp4])
+            db.commit()
+            print("Catálogo de productos de Demo Bakery sembrado.")
+
+        # Sembrar documentos de conocimiento para Demo Bakery
+        if db.query(KnowledgeDocument).filter(KnowledgeDocument.tenant_id == bakery_id).count() == 0:
+            print("Sembrando base de conocimientos para Demo Bakery...")
+            bakery_docs = [
+                KnowledgeDocument(tenant_id=bakery_id, title="Menú y Horarios de Demo Bakery", type="FAQ", content="Bienvenidos a Demo Bakery. Ofrecemos Croissants frescos a $2.50, Tarta de Manzana a $4.00, Baguette Rústico a $3.00 y Pan de Chocolate a $2.80. Abrimos todos los días de 7:00 AM a 8:00 PM.", word_count=200, status="TRAINED"),
+                KnowledgeDocument(tenant_id=bakery_id, title="Políticas de Delivery Bakery", type="POLICY", content="Envío a domicilio disponible en un radio de 3km por $1.50 adicionales.", word_count=100, status="TRAINED")
+            ]
+            db.add_all(bakery_docs)
+            db.commit()
+            print("Base de conocimientos de Demo Bakery sembrada.")
+
     except Exception as e:
         db.rollback()
         print(f"Error al insertar datos de prueba: {str(e)}")
