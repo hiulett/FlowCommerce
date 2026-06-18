@@ -60,7 +60,8 @@ async def run_conversational_agent(
     # 4. Alternativa de IA con Groq (Llama-3.3-70b-versatile)
     if settings.LLM_PROVIDER == "groq" and settings.GROQ_API_KEY:
         try:
-            print(f"[IA] Usando proveedor alternativo Groq con modelo llama-3.3-70b-versatile...")
+            model_name = settings.LLM_MODEL or "llama-3.3-70b-versatile"
+            print(f"[IA] Usando proveedor alternativo Groq con modelo {model_name}...")
             from openai import OpenAI
             import json
 
@@ -125,7 +126,7 @@ async def run_conversational_agent(
             messages.append({"role": "user", "content": user_message})
 
             response = client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
+                model=model_name,
                 messages=messages,
                 tools=openai_tools,
                 tool_choice="auto"
@@ -189,7 +190,7 @@ async def run_conversational_agent(
 
                 print(f"[IA] Enviando resultado de herramienta a Groq para obtener respuesta conversacional final...")
                 final_response = client.chat.completions.create(
-                    model="llama-3.3-70b-versatile",
+                    model=model_name,
                     messages=messages
                 )
                 final_text = final_response.choices[0].message.content
@@ -217,8 +218,9 @@ async def run_conversational_agent(
 
     try:
         # Inicializar modelo con herramientas
+        gemini_model_name = settings.LLM_MODEL or "gemini-2.0-flash"
         model = genai.GenerativeModel(
-            model_name="gemini-2.0-flash",
+            model_name=gemini_model_name,
             tools=tools_definitions,
             system_instruction=system_prompt
         )
