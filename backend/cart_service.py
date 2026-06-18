@@ -168,6 +168,8 @@ def checkout_cart(db: Session, tenant_id: uuid.UUID, customer_id: uuid.UUID) -> 
             return f"Lo siento, la compra falló porque '{product.name}' ya no cuenta con suficiente stock (Disponibles: {product.stock}). Modifica tu carrito."
         product.stock -= item.quantity
 
+    # Actualizar estado a NEW para que aparezca en el tablero de pedidos
+    order.status = "NEW"
     db.commit()
 
     return f"¡Pedido Confirmado! Tu orden #{str(order.id)[:8]} ha sido registrada por un valor total de ${order.total_amount}. Para completar el pago, por favor ingresa al siguiente enlace seguro de Stripe o utiliza transferencia local: [Link de pago de prueba]."

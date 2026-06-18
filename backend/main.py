@@ -114,7 +114,22 @@ async def process_whatsapp_event(payload: WhatsAppWebhookPayload):
                     if msg.text:
                         content = msg.text.body
                     elif msg.location:
-                        content = f"LBS_COORD: {msg.location.latitude}, {msg.location.longitude}"
+                        lat = msg.location.latitude
+                        lon = msg.location.longitude
+                        content = f"Ubicación recibida: Lat {lat}, Lon {lon}"
+                        
+                        # Buscar el último pedido activo del cliente para asociarle la ubicación
+                        from backend.models import Order
+                        active_order = db.query(Order).filter(
+                            Order.customer_id == customer.id,
+                            Order.status.in_(["PENDING_PAYMENT", "NEW", "PREPARING"])
+                        ).order_by(Order.created_at.desc()).first()
+                        
+                        if active_order:
+                            active_order.latitude = lat
+                            active_order.longitude = lon
+                            db.commit()
+                            print(f"[DB] Ubicación guardada con éxito en el Pedido ID: {active_order.id}")
                     else:
                         content = f"[Mensaje de tipo {msg_type} no soportado en MVP]"
                     
@@ -125,15 +140,18 @@ async def process_whatsapp_event(payload: WhatsAppWebhookPayload):
                         print(f"[IA] El agente de IA para el tenant {tenant.name} está pausado. Omitiendo respuesta automática.")
                         continue
                     
-                    # Ejecutar Agente de IA Conversacional real
-                    print(f"[IA] Iniciando agente conversacional para cliente {sender_phone}...")
-                    reply_text = await run_conversational_agent(
-                        db=db,
-                        tenant=tenant,
-                        conversation=conversation,
-                        customer_id=customer.id,
-                        user_message=content
-                    )
+                    if msg_type == "LOCATION":
+                        reply_text = "¡Ubicación de entrega registrada correctamente! 📍 Hemos asociado tu ubicación al pedido en preparación para que nuestro repartidor pueda llegar sin problemas. ¡Muchas gracias!"
+                    else:
+                        # Ejecutar Agente de IA Conversacional real
+                        print(f"[IA] Iniciando agente conversacional para cliente {sender_phone}...")
+                        reply_text = await run_conversational_agent(
+                            db=db,
+                            tenant=tenant,
+                            conversation=conversation,
+                            customer_id=customer.id,
+                            user_message=content
+                        )
                     print(f"[IA] Agente conversacional completado con respuesta: '{reply_text}'")
                     
                     # Guardar respuesta del asistente en BD
@@ -522,6 +540,94 @@ def update_tenant_order_status(order_id: str, data: OrderStatusUpdate, db: Sessi
     db.commit()
     db.refresh(order)
     return {"status": "success", "order_id": str(order.id), "new_status": order.status}
+
+@app.post("/api/tenant/orders/{order_id}/invoice")
+async def send_order_invoice(order_id: str, db: Session = Depends(get_tenant_db)):
+    order = None
+    try:
+        order_uuid = uuid.UUID(order_id)
+        order = db.query(Order).filter(Order.id == order_uuid).first()
+    except ValueError:
+        orders = db.query(Order).all()
+        for o in orders:
+            if str(o.id).endswith(order_id):
+                order = o
+                break
+    
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+        
+    tenant = db.query(Tenant).first()
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant context not found")
+        
+    customer = order.customer
+    if not customer:
+        raise HTTPException(status_code=400, detail="El pedido no tiene un cliente asociado.")
+        
+    # Construir cuerpo de la factura
+    short_order_id = str(order.id).split("-")[-1][:6].upper()
+    date_str = order.created_at.strftime("%Y-%m-%d %H:%M")
+    
+    invoice_text = (
+        f"====================================\n"
+        f"🧾 FACTURA DE VENTA - {tenant.name.upper()}\n"
+        f"====================================\n"
+        f"Factura #: FACT-{short_order_id}\n"
+        f"Fecha: {date_str}\n"
+        f"Cliente: {customer.full_name or 'Cliente Anónimo'}\n"
+        f"Teléfono: {customer.phone_number}\n"
+        f"------------------------------------\n"
+        f"Cant. Producto        P.Unit  Subtotal\n"
+        f"------------------------------------\n"
+    )
+    
+    for item in order.items:
+        prod_name = item.product.name[:20]
+        subtotal = item.quantity * item.price
+        invoice_text += f"{item.quantity}x    {prod_name:<17} ${item.price:<6} ${subtotal:.2f}\n"
+        
+    payment_method = order.payment.gateway if order.payment else "Efectivo"
+    
+    invoice_text += (
+        f"------------------------------------\n"
+        f"TOTAL PAGADO: ${order.total_amount:.2f}\n"
+        f"Método de Pago: {payment_method}\n"
+        f"Estado: {order.status}\n"
+        f"------------------------------------\n"
+        f"¡Gracias por su compra en FlowCommerce!\n"
+        f"===================================="
+    )
+    
+    # Enviar por WhatsApp
+    phone_id = settings.WHATSAPP_PHONE_ID or tenant.whatsapp_phone_id
+    access_token = settings.WHATSAPP_ACCESS_TOKEN or tenant.whatsapp_access_token
+    if not phone_id or not access_token:
+        raise HTTPException(
+            status_code=400,
+            detail="No se han configurado las credenciales de WhatsApp Business API."
+        )
+        
+    from backend.whatsapp_service import send_whatsapp_message
+    
+    res = await send_whatsapp_message(
+        phone_id=phone_id,
+        access_token=access_token,
+        to=customer.phone_number,
+        text=invoice_text
+    )
+    
+    if res and "messages" in res:
+        return {
+            "status": "success",
+            "message": "Factura enviada correctamente por WhatsApp.",
+            "invoice": invoice_text
+        }
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail="Error al enviar la factura por WhatsApp a través de Meta API."
+        )
 
 @app.get("/api/tenant/customers")
 def get_tenant_customers(db: Session = Depends(get_tenant_db)):

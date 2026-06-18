@@ -596,8 +596,31 @@ function ActiveSessionsModal({ onClose, showToast }: { onClose:()=>void; showToa
 }
 
 // ── Order Detail Modal ─────────────────────────────────────────────────────────
-function OrderDetailModal({ order, onClose }: { order:Order; onClose:()=>void }) {
+function OrderDetailModal({ order, onClose, showToast }: { order:Order; onClose:()=>void; showToast:(m:string,t?:ToastMsg['type'])=>void }) {
   const elapsed = Math.floor((Date.now()-order.createdAt.getTime())/60000);
+  const [sendingInvoice, setSendingInvoice] = useState(false);
+
+  const sendInvoice = async () => {
+    setSendingInvoice(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/tenant/orders/${order.uuid || order.id}/invoice`, {
+        method: 'POST',
+        headers: {
+          'X-Tenant-ID': '40446806-0107-6201-9310-c9943efb3870'
+        }
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.detail || 'Fallo al enviar factura');
+      }
+      showToast('Factura enviada por WhatsApp correctamente', 'success');
+    } catch (error: any) {
+      showToast(error.message || 'Error al enviar la factura.', 'error');
+    } finally {
+      setSendingInvoice(false);
+    }
+  };
+
   return (
     <Modal onClose={onClose}>
       <ModalHeader icon="receipt_long" iconColor="blue" title={`Pedido #${order.id}`} subtitle={`${STATUS_LABEL[order.status]} · ${order.createdAt.toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'})}`} onClose={onClose}/>
@@ -609,7 +632,7 @@ function OrderDetailModal({ order, onClose }: { order:Order; onClose:()=>void })
             <div style={{fontWeight:700,fontSize:14}}>{order.customerName}</div>
             <div style={{fontSize:12,color:'var(--color-on-surface-variant)',fontFamily:'monospace'}}>{order.phone}</div>
           </div>
-          <button className="btn btn-success" style={{marginLeft:'auto',fontSize:12,padding:'7px 14px'}}><MI name="chat" style={{fontSize:16}}/>WhatsApp</button>
+          <button className="btn btn-success" style={{marginLeft:'auto',fontSize:12,padding:'7px 14px'}} onClick={()=>window.open(`https://wa.me/${order.phone.replace(/\D/g,'')}`)}><MI name="chat" style={{fontSize:16}}/>WhatsApp</button>
         </div>
         {/* Products */}
         <div className="section-title" style={{fontSize:13}}><MI name="shopping_basket"/>Productos</div>
@@ -636,6 +659,10 @@ function OrderDetailModal({ order, onClose }: { order:Order; onClose:()=>void })
       </div>
       <div className="modal-footer">
         <button className="btn btn-outline" onClick={onClose}>Cerrar</button>
+        <button className="btn btn-outline" onClick={sendInvoice} disabled={sendingInvoice} style={{ borderColor: 'var(--color-primary)', color: 'var(--color-primary)' }}>
+          <MI name={sendingInvoice ? 'refresh' : 'receipt'} style={sendingInvoice ? { animation: 'spin 0.8s linear infinite' } : {}}/>
+          {sendingInvoice ? 'Enviando...' : 'Enviar Factura WhatsApp'}
+        </button>
         <button className="btn btn-primary" onClick={()=>window.open(`https://wa.me/${order.phone.replace(/\D/g,'')}`)}>
           <MI name="chat"/>Contactar por WhatsApp
         </button>
@@ -1844,7 +1871,7 @@ function OrdersView({ orders, delivered, onStartPreparing, onMarkReady, onDelive
           )}
         </div>
       )}
-      {selectedOrder&&<OrderDetailModal order={selectedOrder} onClose={()=>setSelectedOrder(null)}/>}
+      {selectedOrder&&<OrderDetailModal order={selectedOrder} onClose={()=>setSelectedOrder(null)} showToast={showToast}/>}
     </div>
   );
 }
