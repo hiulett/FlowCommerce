@@ -9,7 +9,7 @@ from backend.config import settings
 from backend.database import get_db, SessionLocal
 from backend.schemas import WhatsAppWebhookPayload
 from backend.redis_client import is_duplicate_message
-from backend.models import Tenant, Message, PlatformPlan, PlatformTransaction
+from backend.models import Tenant, Message, PlatformPlan, PlatformTransaction, KnowledgeDocument
 from backend.agent import run_conversational_agent
 from backend.whatsapp_service import (
     get_or_create_customer,
