@@ -1,7 +1,7 @@
 import google.generativeai as genai
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 import numpy as np
 
 from backend.config import settings
