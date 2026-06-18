@@ -336,6 +336,9 @@ def toggle_super_ai_key(key_id: str, db: Session = Depends(get_db)):
     if not key_record:
         raise HTTPException(status_code=404, detail="AI Key not found")
     key_record.is_active = not key_record.is_active
+    if key_record.is_active:
+        key_record.failed_attempts = 0
+        key_record.cool_down_until = None
     db.commit()
     db.refresh(key_record)
     return {"status": "success", "is_active": key_record.is_active}
