@@ -307,7 +307,7 @@ function DocumentModal({ document, onClose, onSave }: { document?:KBDocument; on
         {(document||tab==='text')?(
           <div className="form-group" style={{marginBottom:0}}>
             <label className="form-label">Contenido</label>
-            <textarea className="form-input" rows={10} value={content} onChange={e=>setContent(e.target.value)} placeholder="Pega aquí el contenido..." style={{resize:'vertical'}}/>
+            <textarea className="form-input" rows={20} value={content} onChange={e=>setContent(e.target.value)} placeholder="Pega aquí el contenido..." style={{resize:'vertical', minHeight: '350px'}}/>
             <div className="form-hint">{content.split(' ').filter(Boolean).length} palabras</div>
           </div>
         ):(
@@ -1773,7 +1773,7 @@ function AIKnowledgeView({ showToast, searchQuery }: { showToast:(m:string,t?:To
           <div className="card"><div className="nexus-indicator"/><div className="card-body">
             <div className="section-title"><MI name="smart_toy"/>System Prompt</div>
             <div className="form-group" style={{marginBottom:16}}><label className="form-label">Instrucciones Maestras</label>
-              <textarea className="form-input" rows={6} value={systemPrompt} onChange={e=>setSystemPrompt(e.target.value)} style={{fontFamily:"'JetBrains Mono',monospace",fontSize:12}}/>
+              <textarea className="form-input" rows={12} value={systemPrompt} onChange={e=>setSystemPrompt(e.target.value)} style={{fontFamily:"'JetBrains Mono',monospace",fontSize:12, minHeight: '220px'}}/>
               <div className="form-hint">Define la personalidad e instrucciones del agente de WhatsApp.</div>
             </div>
             <button className="btn btn-primary" style={{width:'100%'}} onClick={handleSavePrompt}><MI name="save"/>Guardar Prompt</button>
