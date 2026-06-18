@@ -24,6 +24,22 @@ app = FastAPI(
     version="1.0.0"
 )
 
+@app.on_event("startup")
+def startup_db_migration():
+    print("[MIGRATION] Running startup database migrations...")
+    db = SessionLocal()
+    try:
+        db.execute(text("ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_method VARCHAR(30) DEFAULT 'DELIVERY';"))
+        db.execute(text("ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_address TEXT;"))
+        db.commit()
+        print("[MIGRATION] Startup database migrations completed successfully.")
+    except Exception as e:
+        db.rollback()
+        print(f"[MIGRATION] Error running startup database migrations: {e}")
+    finally:
+        db.close()
+
+
 # Configuración de CORS
 app.add_middleware(
     CORSMiddleware,
