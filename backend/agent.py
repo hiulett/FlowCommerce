@@ -17,6 +17,69 @@ import uuid
 # Configurar API de Gemini
 genai.configure(api_key=settings.GEMINI_API_KEY or settings.SECRET_KEY)
 
+def parse_and_execute_text_function(text: str, db: Session, tenant_id: uuid.UUID, customer_id: uuid.UUID) -> tuple:
+    """
+    Busca patrones de funciones en formato de texto generados por el LLM, las ejecuta y retorna (nombre_funcion, resultado) o (None, None).
+    """
+    import re
+    import json
+    
+    # Patrón 1: <function(nombre)(args)>
+    match1 = re.search(r"<function\((\w+)\)(?:\((.*?)\))?>", text)
+    # Patrón 2: <function(nombre)>args</function>
+    match2 = re.search(r"<function\((\w+)\)>(.*?)</function>", text, re.DOTALL)
+    
+    func_name = None
+    args_str = None
+    
+    if match1:
+        func_name = match1.group(1)
+        args_str = match1.group(2)
+    elif match2:
+        func_name = match2.group(1)
+        args_str = match2.group(2)
+        
+    if func_name:
+        args = {}
+        if args_str:
+            try:
+                args_cleaned = args_str.strip()
+                if args_cleaned == "{}" or not args_cleaned:
+                    args = {}
+                else:
+                    args = json.loads(args_cleaned)
+            except Exception:
+                try:
+                    import ast
+                    args = ast.literal_eval(args_str.strip())
+                except Exception:
+                    args = {}
+                    
+        print(f"[IA] Interceptada llamada a función en formato texto: '{func_name}' con argumentos: {args}")
+        
+        tool_result = ""
+        if func_name == "add_product_to_order":
+            tool_result = add_item_to_cart(
+                db, tenant_id, customer_id, 
+                args.get("product_name"), 
+                int(args.get("quantity", 1))
+            )
+        elif func_name == "remove_product_from_order":
+            tool_result = remove_item_from_cart(
+                db, tenant_id, customer_id, 
+                args.get("product_name"), 
+                int(args.get("quantity", 1))
+            )
+        elif func_name == "get_order_summary":
+            tool_result = get_cart_summary(db, tenant_id, customer_id)
+        elif func_name == "confirm_and_checkout_order":
+            tool_result = checkout_cart(db, tenant_id, customer_id)
+        else:
+            return None, None
+            
+        return func_name, tool_result
+    return None, None
+
 async def run_conversational_agent(
     db: Session,
     tenant: Tenant,
@@ -135,6 +198,21 @@ async def run_conversational_agent(
             response_message = response.choices[0].message
             tool_calls = response_message.tool_calls
 
+            # Intentar parsear si el modelo generó texto con la función en vez de usar native tool_calls
+            text_content = response_message.content or ""
+            func_name, text_tool_result = parse_and_execute_text_function(text_content, db, tenant.id, customer_id)
+            if func_name:
+                print(f"[IA] Ejecutando llamada de texto en Groq para '{func_name}'...")
+                messages.append({"role": "assistant", "content": text_content})
+                messages.append({"role": "user", "content": f"Resultado de {func_name}: {text_tool_result}"})
+                final_response = client.chat.completions.create(
+                    model=model_name,
+                    messages=messages
+                )
+                final_text = final_response.choices[0].message.content
+                print(f"[IA] Respuesta final post-herramienta (Groq-Texto) generada: '{final_text}'")
+                return final_text
+
             if tool_calls:
                 tool_call = tool_calls[0]
                 function_name = tool_call.function.name
@@ -243,6 +321,18 @@ async def run_conversational_agent(
         # Generar respuesta de Gemini
         print(f"[IA] Enviando solicitud a gemini-2.0-flash...")
         response = model.generate_content(contents)
+
+        # Intentar parsear si el modelo generó texto con la función en vez de usar native tool_calls
+        text_content = response.text or ""
+        func_name, text_tool_result = parse_and_execute_text_function(text_content, db, tenant.id, customer_id)
+        if func_name:
+            print(f"[IA] Ejecutando llamada de texto en Gemini para '{func_name}'...")
+            contents.append({"role": "model", "parts": [text_content]})
+            contents.append({"role": "user", "parts": [f"Resultado de {func_name}: {text_tool_result}"]})
+            final_response = model.generate_content(contents)
+            final_text = final_response.text
+            print(f"[IA] Respuesta final post-herramienta (Gemini-Texto) generada: '{final_text}'")
+            return final_text
 
         # 5. Gestionar llamadas a funciones (Function Calling Loop)
         if response.candidates and response.candidates[0].content.parts:
