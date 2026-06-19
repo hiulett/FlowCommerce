@@ -1919,7 +1919,7 @@ function AIKnowledgeView({ showToast, searchQuery }: { showToast:(m:string,t?:To
         </div>
       </div>
       <div className="grid grid-cols-4 gap-4" style={{marginBottom:24}}>
-        {[{label:'Productos en Catálogo',value:products.length.toString(),icon:'restaurant_menu',color:'indigo'},{label:'Reglas de Negocio',value:businessRules ? 'Activado' : 'Inactivo',icon:'gavel',color:'blue'},{label:'Técnicas Venta',value:salesTechniques ? 'Activado' : 'Inactivo',icon:'record_voice_over',color:'amber'},{label:'Modelo',value:'Gemini',icon:'smart_toy',color:'green'}].map(s=>(
+        {[{label:'Productos en Catálogo',value:products.length.toString(),icon:'restaurant_menu',color:'indigo'},{label:'Reglas de Negocio',value:businessRules ? 'Activado' : 'Inactivo',icon:'gavel',color:'blue'},{label:'Técnicas Venta',value:salesTechniques ? 'Activado' : 'Inactivo',icon:'record_voice_over',color:'amber'},{label:'Menús por Entrenar',value:docs.filter(d=>d.status==='PENDING').length.toString(),icon:'pending_actions',color:docs.filter(d=>d.status==='PENDING').length>0?'orange':'green'}].map(s=>(
           <div key={s.label} className="stat-card"><div className={`stat-icon ${s.color}`}><MI name={s.icon} filled/></div><div><div className="stat-label">{s.label}</div><div className="stat-value" style={{fontSize:22}}>{s.value}</div></div></div>
         ))}
       </div>
