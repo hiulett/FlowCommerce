@@ -1931,6 +1931,7 @@ function AIKnowledgeView({ showToast, searchQuery }: { showToast:(m:string,t?:To
               <textarea className="form-input" rows={6} value={businessRules} onChange={e=>setBusinessRules(e.target.value)} style={{fontSize:13, minHeight: '120px'}} placeholder="Ej: Atendemos de 8am a 10pm. Entregamos solo en el Centro..."/>
               <div className="form-hint">Horarios, envíos, métodos de pago y políticas operativas.</div>
             </div>
+            <button className="btn btn-outline" style={{width:'100%'}} onClick={handleSaveSettings}><MI name="save"/>Guardar Reglas</button>
           </div></div>
 
           <div className="card"><div className="nexus-indicator"/><div className="card-body">
@@ -1939,6 +1940,7 @@ function AIKnowledgeView({ showToast, searchQuery }: { showToast:(m:string,t?:To
               <textarea className="form-input" rows={6} value={salesTechniques} onChange={e=>setSalesTechniques(e.target.value)} style={{fontSize:13, minHeight: '120px'}} placeholder="Ej: Sé amable, usa emojis, siempre ofrece la promoción de 2x1..."/>
               <div className="form-hint">Tono del asistente, técnicas de upselling y estilo de conversación.</div>
             </div>
+            <button className="btn btn-outline" style={{width:'100%'}} onClick={handleSaveSettings}><MI name="save"/>Guardar Técnicas</button>
           </div></div>
         </div>
         
@@ -1949,7 +1951,7 @@ function AIKnowledgeView({ showToast, searchQuery }: { showToast:(m:string,t?:To
               <textarea className="form-input" rows={8} value={systemPrompt} onChange={e=>setSystemPrompt(e.target.value)} style={{fontFamily:"'JetBrains Mono',monospace",fontSize:12, minHeight: '140px'}}/>
               <div className="form-hint">Instrucciones base de IA. (Las Reglas, Técnicas y Catálogo se inyectan automáticamente).</div>
             </div>
-            <button className="btn btn-primary" style={{width:'100%'}} onClick={handleSaveSettings}><MI name="save"/>Guardar Configuración del Banco</button>
+            <button className="btn btn-primary" style={{width:'100%'}} onClick={handleSaveSettings}><MI name="save"/>Guardar Prompt y Configuración General</button>
           </div></div>
           <div className="card" style={{background:'linear-gradient(135deg,var(--color-primary-container),var(--color-secondary-container))'}}>
             <div className="card-body">
