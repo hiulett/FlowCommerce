@@ -870,7 +870,7 @@ def delete_tenant_order(order_id: str, db: Session = Depends(get_tenant_db)):
     if not order:
         orders = db.query(Order).all()
         for o in orders:
-            if str(o.id).endswith(order_id):
+            if str(o.id).startswith(order_id):
                 order = o
                 break
     
@@ -892,7 +892,7 @@ def edit_tenant_order(order_id: str, data: UpdateOrderRequest, db: Session = Dep
     if not order:
         orders = db.query(Order).all()
         for o in orders:
-            if str(o.id).endswith(order_id):
+            if str(o.id).startswith(order_id):
                 order = o
                 break
     

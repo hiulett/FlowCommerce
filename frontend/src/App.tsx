@@ -1891,6 +1891,8 @@ function OrdersView({ orders, delivered, onUpdateOrderStatus, onDeleteOrder, onE
   const [filterStatus,setFilterStatus]=useState('ALL');
   const [showSimulated,setShowSimulated]=useState(true);
   const [selectedOrder,setSelectedOrder]=useState<Order|null>(null);
+  const [editingOrder,setEditingOrder]=useState<Order|null>(null);
+  const [deletingOrder,setDeletingOrder]=useState<Order|null>(null);
   const getMin=(d:Date)=>Math.floor((Date.now()-d.getTime())/60000);
   const exportOrders=()=>{downloadCSV('pedidos_nexus.csv',[['ID','Cliente','Teléfono','Método','Dirección','Productos','Total','Pago','Estado','Fecha'],...orders.map(o=>[o.id,o.customerName,o.phone,o.deliveryMethod==='PICKUP'?'Retiro Local':'Domicilio',o.shippingAddress||'-',o.items.map(i=>`${i.quantity}x${i.name}`).join('; '),o.total.toFixed(2),o.paymentMethod,STATUS_LABEL[o.status],o.createdAt.toLocaleString('es-CO')])]);showToast('CSV exportado correctamente','success');};
 
@@ -1990,8 +1992,8 @@ function OrdersView({ orders, delivered, onUpdateOrderStatus, onDeleteOrder, onE
                         )}
                         {col==='SHIPPED'&&<button className="btn btn-success" style={{width:'100%',padding:'8px',fontSize:12,display:'flex',justifyContent:'center',alignItems:'center',gap:4}} onClick={()=>onUpdateOrderStatus(order.id,'DELIVERED')}><MI name="check_circle" style={{fontSize:16}}/>MARCAR ENTREGADO</button>}
                         <div style={{display:'flex',gap:8,marginTop:8}}>
-                          <button className="btn btn-outline" style={{flex:1,padding:'4px 8px',fontSize:11,display:'flex',justifyContent:'center',alignItems:'center',gap:4,color:'var(--color-outline)'}} onClick={()=>{const n=prompt('Nuevo nombre (deje vacío para no cambiar):',order.customerName);if(n)onEditOrder(order.id,{customerName:n});}}><MI name="edit" style={{fontSize:14}}/>Editar</button>
-                          <button className="btn btn-outline" style={{flex:1,padding:'4px 8px',fontSize:11,display:'flex',justifyContent:'center',alignItems:'center',gap:4,color:'var(--color-error)'}} onClick={()=>{if(confirm('¿Eliminar este pedido?'))onDeleteOrder(order.id);}}><MI name="delete" style={{fontSize:14}}/>Borrar</button>
+                          <button className="btn btn-outline" style={{flex:1,padding:'4px 8px',fontSize:11,display:'flex',justifyContent:'center',alignItems:'center',gap:4,color:'var(--color-outline)'}} onClick={()=>setEditingOrder(order)}><MI name="edit" style={{fontSize:14}}/>Editar</button>
+                          <button className="btn btn-outline" style={{flex:1,padding:'4px 8px',fontSize:11,display:'flex',justifyContent:'center',alignItems:'center',gap:4,color:'var(--color-error)'}} onClick={()=>setDeletingOrder(order)}><MI name="delete" style={{fontSize:14}}/>Borrar</button>
                         </div>
                       </div>
                     );
@@ -2037,8 +2039,8 @@ function OrdersView({ orders, delivered, onUpdateOrderStatus, onDeleteOrder, onE
                       )
                     )}
                     {o.status==='SHIPPED'&&<button className="btn btn-success" style={{padding:'5px 12px',fontSize:11}} onClick={()=>onUpdateOrderStatus(o.id,'DELIVERED')}>Entregado</button>}
-                    <button className="btn btn-outline" style={{padding:'5px',fontSize:11}} title="Editar" onClick={()=>{const n=prompt('Nuevo nombre:',o.customerName);if(n)onEditOrder(o.id,{customerName:n});}}><MI name="edit" style={{fontSize:14}}/></button>
-                    <button className="btn btn-outline" style={{padding:'5px',fontSize:11,color:'var(--color-error)'}} title="Borrar" onClick={()=>{if(confirm('¿Eliminar pedido?'))onDeleteOrder(o.id);}}><MI name="delete" style={{fontSize:14}}/></button>
+                    <button className="btn btn-outline" style={{padding:'5px',fontSize:11}} title="Editar" onClick={()=>setEditingOrder(o)}><MI name="edit" style={{fontSize:14}}/></button>
+                    <button className="btn btn-outline" style={{padding:'5px',fontSize:11,color:'var(--color-error)'}} title="Borrar" onClick={()=>setDeletingOrder(o)}><MI name="delete" style={{fontSize:14}}/></button>
                   </div></td>
                 </tr>
               ))}</tbody>
@@ -2077,6 +2079,8 @@ function OrdersView({ orders, delivered, onUpdateOrderStatus, onDeleteOrder, onE
         </div>
       )}
       {selectedOrder&&<OrderDetailModal order={selectedOrder} onClose={()=>setSelectedOrder(null)} showToast={showToast}/>}
+      {editingOrder&&<EditOrderModal order={editingOrder} onClose={()=>setEditingOrder(null)} onSave={(id,updates)=>{onEditOrder(id,updates);showToast('Pedido actualizado','success');}}/>}
+      {deletingOrder&&<SimpleDeleteModal title={`¿Eliminar pedido #${deletingOrder.id}?`} description="Se eliminará permanentemente del sistema." onClose={()=>setDeletingOrder(null)} onConfirm={()=>{onDeleteOrder(deletingOrder.id);showToast('Pedido eliminado','success');}}/>}
     </div>
   );
 }
