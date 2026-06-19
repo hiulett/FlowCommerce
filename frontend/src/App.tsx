@@ -3022,7 +3022,12 @@ export function SuperAdminAIKeysView({ showToast, searchQuery }: { showToast: (m
     fetch(API_BASE_URL + '/api/super/ai-keys')
       .then(res => res.json())
       .then(data => {
-        setKeys(data);
+        if (Array.isArray(data)) {
+          setKeys(data);
+        } else {
+          console.error("La API no devolvió un arreglo:", data);
+          setKeys([]);
+        }
         setLoading(false);
       })
       .catch(err => {
