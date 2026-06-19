@@ -44,6 +44,16 @@ def search_products_semantic(db: Session, tenant_id: uuid.UUID, query_embedding:
     Realiza una búsqueda semántica de productos filtrada por tenant_id usando pgvector
     y ordenando por similitud coseno (menor distancia coseno).
     """
+    # Si el embedding es nulo/cero (fallback de fallo de API), evitamos consultar pgvector
+    # para no provocar una división por cero y abortar la transacción.
+    if not any(query_embedding):
+        print("[IA] Vector mock detectado (zeros). Usando fallback de búsqueda alfabética directa.")
+        return db.query(Product).filter(
+            Product.tenant_id == tenant_id,
+            Product.is_active == True,
+            Product.stock > 0
+        ).limit(limit).all()
+
     try:
         # El operador <=> en pgvector mapea a cosine_distance en SQLAlchemy
         results = db.query(Product).filter(
@@ -58,6 +68,7 @@ def search_products_semantic(db: Session, tenant_id: uuid.UUID, query_embedding:
         return results
     except Exception as e:
         print(f"Error en búsqueda vectorial (fallback a alfabética): {str(e)}")
+        db.rollback() # Limpiar estado fallido de la transacción
         # Fallback a búsqueda normal por coincidencia de texto básico en caso de fallo de pgvector
         return db.query(Product).filter(
             Product.tenant_id == tenant_id,
