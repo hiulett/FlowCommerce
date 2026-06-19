@@ -624,7 +624,7 @@ async def train_tenant_documents(db: Session = Depends(get_tenant_db)):
         extracted_products = []
         for doc in catalog_docs:
             if doc.content:
-                parsed = await parse_catalog_document_to_products(doc.content)
+                parsed = await parse_catalog_document_to_products(doc.content, db)
                 extracted_products.extend(parsed)
         
         if extracted_products:

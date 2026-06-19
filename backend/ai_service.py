@@ -77,17 +77,31 @@ def format_products_context(products: List[Product]) -> str:
         context += f"- ID: {p.id} | Nombre: {p.name} | Categoría: {category_name} | Precio: ${p.price} | Stock Disponible: {p.stock} | Descripción: {p.description or 'Sin descripción'}\n"
     return context
 
-async def parse_catalog_document_to_products(content: str) -> List[Dict[str, Any]]:
+async def parse_catalog_document_to_products(content: str, db=None) -> List[Dict[str, Any]]:
     """
     Usa la API de Gemini para estructurar el contenido de un documento de catálogo
     en una lista de diccionarios de productos.
     """
     import json
     from openai import OpenAI
+    from backend.ai_balancer import AIBalancer
     try:
+        api_key = None
+        base_url = "https://api.deepseek.com"
+        
+        if db:
+            balancer = AIBalancer()
+            key_record = balancer.get_next_key(db, "deepseek")
+            if key_record:
+                api_key = key_record.api_key
+        
+        if not api_key:
+            print("[IA] No se encontró API Key de DeepSeek para extracción. Abortando.")
+            return []
+            
         client = OpenAI(
-            base_url=settings.OLLAMA_BASE_URL,
-            api_key="ollama"
+            base_url=base_url,
+            api_key=api_key
         )
         
         prompt = (
@@ -103,8 +117,11 @@ async def parse_catalog_document_to_products(content: str) -> List[Dict[str, Any
         )
         
         response = client.chat.completions.create(
-            model="qwen2.5:3b",
-            messages=[{"role": "user", "content": prompt}],
+            model="deepseek-chat",
+            messages=[
+                {"role": "system", "content": "You are a helpful data extraction assistant that outputs strictly valid JSON arrays."},
+                {"role": "user", "content": prompt}
+            ],
             response_format={"type": "json_object"}
         )
         
@@ -121,6 +138,6 @@ async def parse_catalog_document_to_products(content: str) -> List[Dict[str, Any
             return products["products"]
         return []
     except Exception as e:
-        print(f"Error parsing catalog document with Gemini: {e}")
+        print(f"Error parsing catalog document with DeepSeek: {e}")
         return []
 
