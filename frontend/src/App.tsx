@@ -981,6 +981,19 @@ function AddPaymentModal({ onClose, onSave }: { onClose: () => void; onSave: () 
   const [exp, setExp] = useState('');
   const [cvc, setCvc] = useState('');
   const [name, setName] = useState('');
+
+  const openEditModal = (k: AIKey) => {
+    setEditingKeyId(k.id);
+    setName(k.name);
+    setProvider(k.provider);
+    setModelName(k.model_name);
+    setApiKey(''); // Do not show existing
+    setSupportsTools(k.supports_tools);
+    setTasks(k.tasks || '');
+    setSpendingLimit(k.spending_limit ? String(k.spending_limit) : '');
+    setModal(true);
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!num || !exp || !cvc || !name) return;
@@ -2785,6 +2798,19 @@ function SuperEditTenantModal({ tenant, plans, onClose, onSave }: { tenant: Tena
   const [plan, setPlan] = useState(tenant.plan);
   const [status, setStatus] = useState(tenant.status);
 
+
+  const openEditModal = (k: AIKey) => {
+    setEditingKeyId(k.id);
+    setName(k.name);
+    setProvider(k.provider);
+    setModelName(k.model_name);
+    setApiKey(''); // Do not show existing
+    setSupportsTools(k.supports_tools);
+    setTasks(k.tasks || '');
+    setSpendingLimit(k.spending_limit ? String(k.spending_limit) : '');
+    setModal(true);
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onSave({ name, owner, plan, status });
@@ -3165,6 +3191,9 @@ export function SuperAdminAIKeysView({ showToast, searchQuery }: { showToast: (m
   const [supportsTools, setSupportsTools] = useState(true);
   const [tasks, setTasks] = useState('');
   const [spendingLimit, setSpendingLimit] = useState('');
+  const [editingKeyId, setEditingKeyId] = useState<string | null>(null);
+  const [usage, setUsage] = useState<any[]>([]);
+  const [usageLoading, setUsageLoading] = useState(false);
 
   const fetchKeys = useCallback(() => {
     setLoading(true);
@@ -3188,6 +3217,26 @@ export function SuperAdminAIKeysView({ showToast, searchQuery }: { showToast: (m
   useEffect(() => {
     fetchKeys();
   }, [fetchKeys]);
+
+  const fetchUsage = useCallback(() => {
+    setUsageLoading(true);
+    fetch(API_BASE_URL + '/api/super/ai-usage')
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data)) setUsage(data);
+        else console.error(data);
+        setUsageLoading(false);
+      })
+      .catch(err => {
+        console.error("Error fetching AI usage:", err);
+        setUsageLoading(false);
+      });
+  }, []);
+
+  useEffect(() => {
+    fetchUsage();
+  }, [fetchUsage]);
+
 
   const handleToggle = (id: string, name: string) => {
     fetch(`${API_BASE_URL}/api/super/ai-keys/${id}/toggle`, {
@@ -3216,15 +3265,30 @@ export function SuperAdminAIKeysView({ showToast, searchQuery }: { showToast: (m
       .catch(err => console.error("Error deleting key:", err));
   };
 
+
+  const openEditModal = (k: AIKey) => {
+    setEditingKeyId(k.id);
+    setName(k.name);
+    setProvider(k.provider);
+    setModelName(k.model_name);
+    setApiKey(''); // Do not show existing
+    setSupportsTools(k.supports_tools);
+    setTasks(k.tasks || '');
+    setSpendingLimit(k.spending_limit ? String(k.spending_limit) : '');
+    setModal(true);
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    fetch(API_BASE_URL + '/api/super/ai-keys', {
-      method: 'POST',
+    const url = editingKeyId ? `${API_BASE_URL}/api/super/ai-keys/${editingKeyId}` : `${API_BASE_URL}/api/super/ai-keys`;
+    const method = editingKeyId ? 'PUT' : 'POST';
+    fetch(url, {
+      method: method,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         provider,
         name,
-        api_key: apiKey,
+        api_key: apiKey || undefined,
         model_name: modelName,
         supports_tools: supportsTools,
         tasks: tasks || null,
@@ -3233,8 +3297,8 @@ export function SuperAdminAIKeysView({ showToast, searchQuery }: { showToast: (m
     })
       .then(res => res.json())
       .then(() => {
-        showToast('Conexión de IA agregada correctamente', 'success');
-        setModal(false);
+        showToast(editingKeyId ? 'Conexión de IA actualizada correctamente' : 'Conexión de IA agregada correctamente', 'success');
+        setModal(false); setEditingKeyId(null);
         // Reset form
         setName('');
         setApiKey('');
@@ -3330,6 +3394,9 @@ export function SuperAdminAIKeysView({ showToast, searchQuery }: { showToast: (m
                   </td>
                   <td style={{ textAlign: 'right' }}>
                     <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                      <button className="btn btn-ghost" style={{ padding: '4px 10px' }} onClick={() => openEditModal(k)}>
+                        <MI name="edit" style={{ fontSize: 16 }}/>
+                      </button>
                       <button className="btn btn-ghost" style={{ padding: '4px 10px' }} onClick={() => handleToggle(k.id, k.name)}>
                         <MI name={k.is_active ? 'block' : 'check_circle'} style={{ fontSize: 16 }}/>
                       </button>
@@ -3347,7 +3414,7 @@ export function SuperAdminAIKeysView({ showToast, searchQuery }: { showToast: (m
 
       {modal && (
         <Modal onClose={() => setModal(false)}>
-          <ModalHeader icon="smart_toy" iconColor="blue" title="Agregar Conexión de IA" subtitle="Registra una nueva API Key en el balanceador" onClose={() => setModal(false)}/>
+          <ModalHeader icon="smart_toy" iconColor="blue" title={editingKeyId ? "Editar Conexión de IA" : "Agregar Conexión de IA"} subtitle={editingKeyId ? "Actualiza los datos de la conexión" : "Registra una nueva API Key en el balanceador"} onClose={() => setModal(false)}/>
           <form onSubmit={handleSubmit}>
             <div className="modal-body">
               <div className="form-group">
@@ -3386,7 +3453,7 @@ export function SuperAdminAIKeysView({ showToast, searchQuery }: { showToast: (m
 
               <div className="form-group">
                 <label className="form-label">API Key</label>
-                <input className="form-input font-mono" type="password" required placeholder="Ingresa la clave API" value={apiKey} onChange={e => setApiKey(e.target.value)}/>
+                <input className="form-input font-mono" type="password" required={!editingKeyId} placeholder={editingKeyId ? "Déjalo en blanco para mantener la actual" : "Ingresa la clave API"} value={apiKey} onChange={e => setApiKey(e.target.value)}/>
                 <span className="form-hint">La clave será encriptada mediante AES-256 antes de guardarse en base de datos.</span>
               </div>
 
@@ -3492,6 +3559,57 @@ export function SuperAdminAIUsageView({ showToast }: { showToast: (m: string, t?
           </table>
         )}
       </div>
+
+      <div className="page-header" style={{ marginTop: 40 }}>
+        <div className="page-header-title">
+          <h2>Uso de IA y Facturación</h2>
+          <p><MI name="monitoring"/>Monitoreo de consumo de tokens y costos por Tenant</p>
+        </div>
+      </div>
+      <div className="stats-grid mb-6">
+        <div className="stat-card">
+          <div className="stat-icon" style={{background: 'var(--color-primary-light)', color: 'var(--color-primary)'}}>
+            <MI name="payments"/>
+          </div>
+          <div className="stat-content">
+            <div className="stat-value">${usage.reduce((acc, curr) => acc + curr.total_cost, 0).toFixed(4)}</div>
+            <div className="stat-label">Costo Total IA</div>
+          </div>
+        </div>
+      </div>
+      <div className="data-table-wrapper">
+        {usageLoading ? (
+          <div style={{ padding: 40, textAlign: 'center', color: 'var(--color-outline)' }}>Cargando consumo...</div>
+        ) : usage.length === 0 ? (
+          <div style={{ padding: 40, textAlign: 'center', color: 'var(--color-outline)' }}>No hay datos de consumo registrados.</div>
+        ) : (
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>ID Tenant</th>
+                <th>Nombre Tenant</th>
+                <th style={{ textAlign: 'right' }}>Tokens Input</th>
+                <th style={{ textAlign: 'right' }}>Tokens Output</th>
+                <th style={{ textAlign: 'right' }}>Costo Estimado ($)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {usage.map((u, i) => (
+                <tr key={i}>
+                  <td className="font-mono" style={{ fontSize: 12 }}>{u.tenant_id}</td>
+                  <td style={{ fontWeight: 600 }}>{u.tenant_name}</td>
+                  <td style={{ textAlign: 'right' }}>{u.input_tokens.toLocaleString()}</td>
+                  <td style={{ textAlign: 'right' }}>{u.output_tokens.toLocaleString()}</td>
+                  <td style={{ textAlign: 'right', fontWeight: 600, color: 'var(--color-primary)' }}>
+                    ${u.total_cost.toFixed(4)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
     </div>
   );
 }
@@ -3956,7 +4074,7 @@ export default function App({ user, onLogout }: { user:{name:string;email:string
               {activeTab==='dashboard'     &&<SuperAdminDashboardView tenants={tenants} logs={financialLogs}/>}
               {activeTab==='super-tenants' &&<SuperAdminTenantsView tenants={tenants} plans={platformPlans} onUpdateTenant={handleUpdateTenant} showToast={showToast} searchQuery={searchQuery}/>}
               {activeTab==='super-ai-keys' &&<SuperAdminAIKeysView showToast={showToast} searchQuery={searchQuery}/>}
-              {activeTab==='super-ai-usage' &&<SuperAdminAIUsageView showToast={showToast}/>}
+              
               {activeTab==='super-plans'   &&<SuperAdminPlansView plans={platformPlans} onUpdatePlan={handleUpdatePlan} showToast={showToast}/>}
               {activeTab==='super-billing' &&<SuperAdminBillingView logs={financialLogs} onUpdateLog={handleUpdateLog} showToast={showToast} searchQuery={searchQuery}/>}
               {activeTab==='settings'      &&<div className="card"><div className="nexus-indicator"/><div className="card-body">
