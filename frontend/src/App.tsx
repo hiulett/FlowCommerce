@@ -989,7 +989,13 @@ function AddPaymentModal({ onClose, onSave }: { onClose: () => void; onSave: () 
     setModelName(k.model_name);
     setApiKey(''); // Do not show existing
     setSupportsTools(k.supports_tools);
-    setTasks(k.tasks || '');
+    try {
+      if (k.tasks) {
+        setTasks(typeof k.tasks === 'string' ? JSON.parse(k.tasks) : k.tasks);
+      } else {
+        setTasks([]);
+      }
+    } catch(e) { setTasks([]); }
     setSpendingLimit(k.spending_limit ? String(k.spending_limit) : '');
     setModal(true);
   };
@@ -2806,7 +2812,13 @@ function SuperEditTenantModal({ tenant, plans, onClose, onSave }: { tenant: Tena
     setModelName(k.model_name);
     setApiKey(''); // Do not show existing
     setSupportsTools(k.supports_tools);
-    setTasks(k.tasks || '');
+    try {
+      if (k.tasks) {
+        setTasks(typeof k.tasks === 'string' ? JSON.parse(k.tasks) : k.tasks);
+      } else {
+        setTasks([]);
+      }
+    } catch(e) { setTasks([]); }
     setSpendingLimit(k.spending_limit ? String(k.spending_limit) : '');
     setModal(true);
   };
@@ -3010,56 +3022,7 @@ export function SuperAdminTenantsView({ tenants, plans, onUpdateTenant, showToas
         <SuperEditTenantModal tenant={selected} plans={plans} onClose={() => { setSelected(null); setModal(null); }} onSave={d => { onUpdateTenant(selected.id, d); showToast('Tenant actualizado correctamente', 'success'); }}/>
       )}
 
-      <div className="page-header" style={{ marginTop: 40 }}>
-        <div className="page-header-title">
-          <h2>Uso de IA y Facturación</h2>
-          <p><MI name="monitoring"/>Monitoreo de consumo de tokens y costos por Tenant</p>
-        </div>
-      </div>
-      <div className="stats-grid mb-6">
-        <div className="stat-card">
-          <div className="stat-icon" style={{background: 'var(--color-primary-light)', color: 'var(--color-primary)'}}>
-            <MI name="payments"/>
           </div>
-          <div className="stat-content">
-            <div className="stat-value">${usage.reduce((acc, curr) => acc + curr.total_cost, 0).toFixed(4)}</div>
-            <div className="stat-label">Costo Total IA</div>
-          </div>
-        </div>
-      </div>
-      <div className="data-table-wrapper">
-        {usageLoading ? (
-          <div style={{ padding: 40, textAlign: 'center', color: 'var(--color-outline)' }}>Cargando consumo...</div>
-        ) : usage.length === 0 ? (
-          <div style={{ padding: 40, textAlign: 'center', color: 'var(--color-outline)' }}>No hay datos de consumo registrados.</div>
-        ) : (
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>ID Tenant</th>
-                <th>Nombre Tenant</th>
-                <th style={{ textAlign: 'right' }}>Tokens Input</th>
-                <th style={{ textAlign: 'right' }}>Tokens Output</th>
-                <th style={{ textAlign: 'right' }}>Costo Estimado ($)</th>
-              </tr>
-            </thead>
-            <tbody>
-              {usage.map((u, i) => (
-                <tr key={i}>
-                  <td className="font-mono" style={{ fontSize: 12 }}>{u.tenant_id}</td>
-                  <td style={{ fontWeight: 600 }}>{u.tenant_name}</td>
-                  <td style={{ textAlign: 'right' }}>{u.input_tokens.toLocaleString()}</td>
-                  <td style={{ textAlign: 'right' }}>{u.output_tokens.toLocaleString()}</td>
-                  <td style={{ textAlign: 'right', fontWeight: 600, color: 'var(--color-primary)' }}>
-                    ${u.total_cost.toFixed(4)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-    </div>
   );
 }
 
@@ -3139,56 +3102,7 @@ export function SuperAdminPlansView({ plans, onUpdatePlan, showToast }: { plans:
         </Modal>
       )}
 
-      <div className="page-header" style={{ marginTop: 40 }}>
-        <div className="page-header-title">
-          <h2>Uso de IA y Facturación</h2>
-          <p><MI name="monitoring"/>Monitoreo de consumo de tokens y costos por Tenant</p>
-        </div>
-      </div>
-      <div className="stats-grid mb-6">
-        <div className="stat-card">
-          <div className="stat-icon" style={{background: 'var(--color-primary-light)', color: 'var(--color-primary)'}}>
-            <MI name="payments"/>
           </div>
-          <div className="stat-content">
-            <div className="stat-value">${usage.reduce((acc, curr) => acc + curr.total_cost, 0).toFixed(4)}</div>
-            <div className="stat-label">Costo Total IA</div>
-          </div>
-        </div>
-      </div>
-      <div className="data-table-wrapper">
-        {usageLoading ? (
-          <div style={{ padding: 40, textAlign: 'center', color: 'var(--color-outline)' }}>Cargando consumo...</div>
-        ) : usage.length === 0 ? (
-          <div style={{ padding: 40, textAlign: 'center', color: 'var(--color-outline)' }}>No hay datos de consumo registrados.</div>
-        ) : (
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>ID Tenant</th>
-                <th>Nombre Tenant</th>
-                <th style={{ textAlign: 'right' }}>Tokens Input</th>
-                <th style={{ textAlign: 'right' }}>Tokens Output</th>
-                <th style={{ textAlign: 'right' }}>Costo Estimado ($)</th>
-              </tr>
-            </thead>
-            <tbody>
-              {usage.map((u, i) => (
-                <tr key={i}>
-                  <td className="font-mono" style={{ fontSize: 12 }}>{u.tenant_id}</td>
-                  <td style={{ fontWeight: 600 }}>{u.tenant_name}</td>
-                  <td style={{ textAlign: 'right' }}>{u.input_tokens.toLocaleString()}</td>
-                  <td style={{ textAlign: 'right' }}>{u.output_tokens.toLocaleString()}</td>
-                  <td style={{ textAlign: 'right', fontWeight: 600, color: 'var(--color-primary)' }}>
-                    ${u.total_cost.toFixed(4)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-    </div>
   );
 }
 
@@ -3291,11 +3205,15 @@ export function SuperAdminAIKeysView({ showToast, searchQuery }: { showToast: (m
   const [modelName, setModelName] = useState('gemini-2.0-flash');
   const [apiKey, setApiKey] = useState('');
   const [supportsTools, setSupportsTools] = useState(true);
-  const [tasks, setTasks] = useState('');
+  const [tasks, setTasks] = useState<string[]>([]);
   const [spendingLimit, setSpendingLimit] = useState('');
   const [editingKeyId, setEditingKeyId] = useState<string | null>(null);
   const [usage, setUsage] = useState<any[]>([]);
   const [usageLoading, setUsageLoading] = useState(false);
+  const [usagePeriod, setUsagePeriod] = useState<string>('monthly');
+
+  // Transfer List Data
+  const availableTasksList = ["CONVERSATION", "TOOL_CALLING", "RAG", "SUPPORT_AGENT", "IMAGE_GENERATION"];
 
   const fetchKeys = useCallback(() => {
     setLoading(true);
@@ -3322,7 +3240,7 @@ export function SuperAdminAIKeysView({ showToast, searchQuery }: { showToast: (m
 
   const fetchUsage = useCallback(() => {
     setUsageLoading(true);
-    fetch(API_BASE_URL + '/api/super/ai-usage')
+    fetch(API_BASE_URL + '/api/super/ai-usage?period=' + usagePeriod)
       .then(res => res.json())
       .then(data => {
         if (Array.isArray(data)) setUsage(data);
@@ -3337,7 +3255,7 @@ export function SuperAdminAIKeysView({ showToast, searchQuery }: { showToast: (m
 
   useEffect(() => {
     fetchUsage();
-  }, [fetchUsage]);
+  }, [fetchUsage, usagePeriod]);
 
 
   const handleToggle = (id: string, name: string) => {
@@ -3375,7 +3293,13 @@ export function SuperAdminAIKeysView({ showToast, searchQuery }: { showToast: (m
     setModelName(k.model_name);
     setApiKey(''); // Do not show existing
     setSupportsTools(k.supports_tools);
-    setTasks(k.tasks || '');
+    try {
+      if (k.tasks) {
+        setTasks(typeof k.tasks === 'string' ? JSON.parse(k.tasks) : k.tasks);
+      } else {
+        setTasks([]);
+      }
+    } catch(e) { setTasks([]); }
     setSpendingLimit(k.spending_limit ? String(k.spending_limit) : '');
     setModal(true);
   };
@@ -3393,7 +3317,7 @@ export function SuperAdminAIKeysView({ showToast, searchQuery }: { showToast: (m
         api_key: apiKey || undefined,
         model_name: modelName,
         supports_tools: supportsTools,
-        tasks: tasks || null,
+        tasks: tasks.length > 0 ? JSON.stringify(tasks) : null,
         spending_limit: spendingLimit ? parseFloat(spendingLimit) : null
       })
     })
@@ -3405,7 +3329,7 @@ export function SuperAdminAIKeysView({ showToast, searchQuery }: { showToast: (m
         setName('');
         setApiKey('');
         setSupportsTools(true);
-        setTasks('');
+        setTasks([]);
         setSpendingLimit('');
         fetchKeys();
       })
@@ -3445,6 +3369,67 @@ export function SuperAdminAIKeysView({ showToast, searchQuery }: { showToast: (m
         </button>
       </div>
 
+      {/* ─── DASHBOARD DE USO Y FACTURACIÓN (TOP) ─── */}
+      <div className="stats-grid mb-6" style={{ marginTop: 20 }}>
+        <div className="stat-card" style={{ gridColumn: 'span 3' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}>
+            <h3 style={{ margin: 0, fontSize: 16 }}>Consumo por Tenant vs Límite</h3>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button className={`btn ${usagePeriod === 'weekly' ? 'btn-primary' : 'btn-outline'}`} style={{ padding: '4px 10px', fontSize: 12 }} onClick={() => setUsagePeriod('weekly')}>Semanal</button>
+              <button className={`btn ${usagePeriod === 'biweekly' ? 'btn-primary' : 'btn-outline'}`} style={{ padding: '4px 10px', fontSize: 12 }} onClick={() => setUsagePeriod('biweekly')}>Quincenal</button>
+              <button className={`btn ${usagePeriod === 'monthly' ? 'btn-primary' : 'btn-outline'}`} style={{ padding: '4px 10px', fontSize: 12 }} onClick={() => setUsagePeriod('monthly')}>Mensual</button>
+            </div>
+          </div>
+          
+          {usageLoading ? (
+            <div style={{ padding: 20, textAlign: 'center', color: 'var(--color-outline)' }}>Cargando gráficas...</div>
+          ) : usage.length === 0 ? (
+            <div style={{ padding: 20, textAlign: 'center', color: 'var(--color-outline)' }}>No hay datos de consumo registrados.</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 15 }}>
+              {usage.sort((a,b) => b.total_cost - a.total_cost).map((u, i) => {
+                const limit = u.ai_spending_limit || 0;
+                const cost = u.total_cost || 0;
+                const percentage = limit > 0 ? Math.min((cost / limit) * 100, 100) : 0;
+                const isAlert = u.is_near_limit || percentage >= 90;
+                
+                return (
+                  <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, fontWeight: 600 }}>
+                      <span>{u.tenant_name} <span className="font-mono" style={{color:'var(--color-outline)'}}>({u.tenant_id.substring(0,8)})</span></span>
+                      <span style={{ color: isAlert ? 'var(--color-error)' : 'inherit' }}>
+                        ${cost.toFixed(2)} {limit > 0 ? `/ $${limit.toFixed(2)}` : '(Sin límite)'}
+                      </span>
+                    </div>
+                    {limit > 0 && (
+                      <div style={{ width: '100%', height: 8, background: 'var(--color-bg-alt)', borderRadius: 4, overflow: 'hidden' }}>
+                        <div style={{ 
+                          height: '100%', 
+                          width: `${percentage}%`, 
+                          background: isAlert ? 'var(--color-error)' : 'var(--color-primary)',
+                          transition: 'width 0.3s ease'
+                        }} />
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+        
+        <div className="stat-card">
+          <div className="stat-icon" style={{background: 'var(--color-primary-light)', color: 'var(--color-primary)'}}>
+            <MI name="payments"/>
+          </div>
+          <div className="stat-content">
+            <div className="stat-value">${usage.reduce((acc, curr) => acc + curr.total_cost, 0).toFixed(4)}</div>
+            <div className="stat-label">Costo Total ({usagePeriod})</div>
+          </div>
+        </div>
+      </div>
+
+
       <div className="data-table-wrapper">
         {loading ? (
           <div style={{ padding: 40, textAlign: 'center', color: 'var(--color-outline)' }}>Cargando conexiones...</div>
@@ -3480,7 +3465,7 @@ export function SuperAdminAIKeysView({ showToast, searchQuery }: { showToast: (m
                     </span>
                   </td>
                   <td style={{ fontSize: 12 }}>
-                    {k.tasks || 'Todas'}
+                    {Array.isArray(k.tasks) ? k.tasks.join(', ') : (typeof k.tasks === 'string' ? k.tasks : 'Todas')}
                   </td>
                   <td style={{ fontSize: 12 }}>
                     ${(k.current_spend || 0).toFixed(4)} {k.spending_limit ? `/ $${k.spending_limit}` : ''}
@@ -3560,9 +3545,30 @@ export function SuperAdminAIKeysView({ showToast, searchQuery }: { showToast: (m
               </div>
 
               <div className="form-group">
-                <label className="form-label">Tareas (Opcional, separadas por coma)</label>
-                <input className="form-input" placeholder="Ej: conver, tools" value={tasks} onChange={e => setTasks(e.target.value)}/>
-                <span className="form-hint">Si se deja en blanco, la llave servirá para todas las tareas.</span>
+                <label className="form-label">Asignación de Tareas (Transfer List)</label>
+                <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                  <div style={{ flex: 1, border: '1px solid var(--color-border)', borderRadius: 8, height: 150, overflowY: 'auto', background: 'var(--color-bg-alt)', padding: 5 }}>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-outline)', padding: 5, borderBottom: '1px solid var(--color-border)', marginBottom: 5 }}>Disponibles</div>
+                    {availableTasksList.filter(t => !tasks.includes(t)).map(t => (
+                      <div key={t} onClick={() => setTasks([...tasks, t])} style={{ padding: '6px 10px', fontSize: 13, cursor: 'pointer', borderRadius: 4, background: 'var(--color-bg-primary)', marginBottom: 2 }}>
+                        {t}
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    <MI name="arrow_forward_ios" style={{ fontSize: 16, color: 'var(--color-outline)' }}/>
+                    <MI name="arrow_back_ios" style={{ fontSize: 16, color: 'var(--color-outline)' }}/>
+                  </div>
+                  <div style={{ flex: 1, border: '1px solid var(--color-primary)', borderRadius: 8, height: 150, overflowY: 'auto', background: 'var(--color-bg-primary)', padding: 5 }}>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-primary)', padding: 5, borderBottom: '1px solid var(--color-border)', marginBottom: 5 }}>Asignadas</div>
+                    {tasks.map(t => (
+                      <div key={t} onClick={() => setTasks(tasks.filter(x => x !== t))} style={{ padding: '6px 10px', fontSize: 13, cursor: 'pointer', borderRadius: 4, background: 'var(--color-primary-light)', color: 'var(--color-primary)', marginBottom: 2 }}>
+                        {t}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <span className="form-hint">Haz clic en una tarea para moverla de lista. Si la lista de asignadas está vacía, servirá para todas las tareas.</span>
               </div>
               <div className="form-group">
                 <label className="form-label">Límite de Gasto $ (Opcional)</label>
@@ -3583,56 +3589,7 @@ export function SuperAdminAIKeysView({ showToast, searchQuery }: { showToast: (m
         </Modal>
       )}
 
-      <div className="page-header" style={{ marginTop: 40 }}>
-        <div className="page-header-title">
-          <h2>Uso de IA y Facturación</h2>
-          <p><MI name="monitoring"/>Monitoreo de consumo de tokens y costos por Tenant</p>
-        </div>
-      </div>
-      <div className="stats-grid mb-6">
-        <div className="stat-card">
-          <div className="stat-icon" style={{background: 'var(--color-primary-light)', color: 'var(--color-primary)'}}>
-            <MI name="payments"/>
           </div>
-          <div className="stat-content">
-            <div className="stat-value">${usage.reduce((acc, curr) => acc + curr.total_cost, 0).toFixed(4)}</div>
-            <div className="stat-label">Costo Total IA</div>
-          </div>
-        </div>
-      </div>
-      <div className="data-table-wrapper">
-        {usageLoading ? (
-          <div style={{ padding: 40, textAlign: 'center', color: 'var(--color-outline)' }}>Cargando consumo...</div>
-        ) : usage.length === 0 ? (
-          <div style={{ padding: 40, textAlign: 'center', color: 'var(--color-outline)' }}>No hay datos de consumo registrados.</div>
-        ) : (
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>ID Tenant</th>
-                <th>Nombre Tenant</th>
-                <th style={{ textAlign: 'right' }}>Tokens Input</th>
-                <th style={{ textAlign: 'right' }}>Tokens Output</th>
-                <th style={{ textAlign: 'right' }}>Costo Estimado ($)</th>
-              </tr>
-            </thead>
-            <tbody>
-              {usage.map((u, i) => (
-                <tr key={i}>
-                  <td className="font-mono" style={{ fontSize: 12 }}>{u.tenant_id}</td>
-                  <td style={{ fontWeight: 600 }}>{u.tenant_name}</td>
-                  <td style={{ textAlign: 'right' }}>{u.input_tokens.toLocaleString()}</td>
-                  <td style={{ textAlign: 'right' }}>{u.output_tokens.toLocaleString()}</td>
-                  <td style={{ textAlign: 'right', fontWeight: 600, color: 'var(--color-primary)' }}>
-                    ${u.total_cost.toFixed(4)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-    </div>
   );
 }
 

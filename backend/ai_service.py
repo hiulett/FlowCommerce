@@ -50,8 +50,7 @@ def search_products_semantic(db: Session, tenant_id: uuid.UUID, query_embedding:
         print("[IA] Vector mock detectado (zeros). Usando fallback de búsqueda alfabética directa.")
         return db.query(Product).filter(
             Product.tenant_id == tenant_id,
-            Product.is_active == True,
-            Product.stock > 0
+            Product.is_active == True
         ).limit(limit).all()
 
     try:
@@ -72,8 +71,7 @@ def search_products_semantic(db: Session, tenant_id: uuid.UUID, query_embedding:
         # Fallback a búsqueda normal por coincidencia de texto básico en caso de fallo de pgvector
         return db.query(Product).filter(
             Product.tenant_id == tenant_id,
-            Product.is_active == True,
-            Product.stock > 0
+            Product.is_active == True
         ).limit(limit).all()
 
 def format_products_context(products: List[Product]) -> str:

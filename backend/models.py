@@ -21,6 +21,7 @@ class Tenant(Base):
     owner_email = Column(String(150), nullable=True, default="admin@nexus.com")
     storage_used = Column(Integer, default=0) # MB
     messages_count = Column(Integer, default=0)
+    ai_spending_limit = Column(Numeric(10, 2), nullable=True) # Limite de gasto en dolares para la IA
     created_at = Column(DateTime, default=datetime.utcnow)
 
     users = relationship("User", back_populates="tenant", cascade="all, delete-orphan")
