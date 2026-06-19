@@ -13,6 +13,16 @@ from backend.cart_service import (
     checkout_cart
 )
 import uuid
+import re
+
+def clean_ai_response(text: str) -> str:
+    """Elimina etiquetas internas como las de DeepSeek <｜｜DSML｜｜tool_calls>"""
+    if not text:
+        return ""
+    # Eliminar bloques completos de <｜｜DSML｜｜tool_calls>...
+    text = re.sub(r'<｜｜DSML｜｜tool_calls>.*?</｜｜DSML｜｜tool_calls>', '', text, flags=re.DOTALL)
+    text = re.sub(r'<｜｜DSML｜｜.*?>', '', text)
+    return text.strip()
 
 # Configurar API de Gemini
 genai.configure(api_key=settings.GEMINI_API_KEY or settings.SECRET_KEY)
@@ -405,7 +415,7 @@ async def run_conversational_agent(
                         model=model_name,
                         messages=messages
                     )
-                    final_text = final_response.choices[0].message.content
+                    final_text = clean_ai_response(final_response.choices[0].message.content)
                     print(f"[IA] Respuesta final post-herramienta (DeepSeek-Texto) generada: '{final_text}'")
                     if key_id:
                         balancer.update_last_used(db, key_id)
@@ -462,16 +472,17 @@ async def run_conversational_agent(
                         model=model_name,
                         messages=messages
                     )
-                    final_text = final_response.choices[0].message.content
+                    final_text = clean_ai_response(final_response.choices[0].message.content)
                     print(f"[IA] Respuesta final post-herramienta (DeepSeek) generada: '{final_text}'")
                     if key_id:
                         balancer.update_last_used(db, key_id)
                     return final_text
 
-                print(f"[IA] Respuesta directa (DeepSeek) generada: '{response_message.content}'")
+                content = clean_ai_response(response_message.content)
+                print(f"[IA] Respuesta directa (DeepSeek) generada: '{content}'")
                 if key_id:
                     balancer.update_last_used(db, key_id)
-                return response_message.content
+                return content
 
             elif provider == "groq":
                 from openai import OpenAI
