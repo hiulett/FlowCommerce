@@ -788,49 +788,49 @@ async def train_tenant_documents_task(tenant_id: str):
                     description = item.get("description", "")
                     price = item.get("price", 0.0)
                     stock = item.get("stock", 10)
-                category_name = item.get("category", "General")
-                
-                # Obtener o crear categoría
-                category = db.query(Category).filter(
-                    Category.tenant_id == tenant.id,
-                    Category.name.ilike(category_name)
-                ).first()
-                if not category:
-                    category = Category(tenant_id=tenant.id, name=category_name)
-                    db.add(category)
+                    category_name = item.get("category", "General")
+                    
+                    # Obtener o crear categoría
+                    category = db.query(Category).filter(
+                        Category.tenant_id == tenant.id,
+                        Category.name.ilike(category_name)
+                    ).first()
+                    if not category:
+                        category = Category(tenant_id=tenant.id, name=category_name)
+                        db.add(category)
+                        db.commit()
+                        db.refresh(category)
+                    
+                    # Generar embedding del producto
+                    embedding_vector = await get_embedding(f"{name} {description}")
+                    
+                    # Upsert producto
+                    prod = db.query(Product).filter(
+                        Product.tenant_id == tenant.id,
+                        Product.name.ilike(name)
+                    ).first()
+                    
+                    if prod:
+                        prod.description = description
+                        prod.price = Decimal(str(price))
+                        prod.stock = stock
+                        prod.category_id = category.id
+                        prod.is_active = True
+                        prod.embedding = embedding_vector
+                    else:
+                        prod = Product(
+                            tenant_id=tenant.id,
+                            category_id=category.id,
+                            name=name,
+                            description=description,
+                            price=Decimal(str(price)),
+                            stock=stock,
+                            is_active=True,
+                            embedding=embedding_vector
+                        )
+                        db.add(prod)
                     db.commit()
-                    db.refresh(category)
-                
-                # Generar embedding del producto
-                embedding_vector = await get_embedding(f"{name} {description}")
-                
-                # Upsert producto
-                prod = db.query(Product).filter(
-                    Product.tenant_id == tenant.id,
-                    Product.name.ilike(name)
-                ).first()
-                
-                if prod:
-                    prod.description = description
-                    prod.price = Decimal(str(price))
-                    prod.stock = stock
-                    prod.category_id = category.id
-                    prod.is_active = True
-                    prod.embedding = embedding_vector
-                else:
-                    prod = Product(
-                        tenant_id=tenant.id,
-                        category_id=category.id,
-                        name=name,
-                        description=description,
-                        price=Decimal(str(price)),
-                        stock=stock,
-                        is_active=True,
-                        embedding=embedding_vector
-                    )
-                    db.add(prod)
-                db.commit()
-                parsed_count += 1
+                    parsed_count += 1
             
             # Desactivar productos anteriores que no están en el nuevo catálogo
             if active_product_names:
