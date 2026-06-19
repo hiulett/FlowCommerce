@@ -58,8 +58,7 @@ def search_products_semantic(db: Session, tenant_id: uuid.UUID, query_embedding:
         results = db.query(Product).filter(
             and_(
                 Product.tenant_id == tenant_id,
-                Product.is_active == True,
-                Product.stock > 0
+                Product.is_active == True
             )
         ).order_by(
             Product.embedding.cosine_distance(query_embedding)
