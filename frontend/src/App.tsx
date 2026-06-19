@@ -40,7 +40,7 @@ interface TeamMember {
 }
 interface KBDocument {
   id: string; title: string;
-  type: 'FAQ' | 'CATALOG' | 'POLICY' | 'PROMO';
+  type: 'FAQ' | 'CATALOG' | 'POLICY' | 'PROMO' | 'SALES_TECHNIQUE';
   wordCount: number; lastUpdated: string;
   status: 'TRAINED' | 'PENDING'; content?: string;
 }
@@ -88,8 +88,8 @@ function MI({ name, filled=false, style }: { name:string; filled?:boolean; style
 function getInitials(name:string) { return name.split(' ').map(n=>n[0]).join('').substring(0,2).toUpperCase(); }
 const AVATAR_COLORS = ['#e2dfff','#d1fae5','#dbeafe','#fde68a','#ffdbc7','#fce7f3','#ede9fe'];
 const ROLE_CLASS: Record<TeamMember['role'],string> = { 'Super Admin':'role-superadmin','Operador KDS':'role-operator','Agente IA':'role-agent','Solo Lectura':'role-operator' };
-const KB_ICONS: Record<KBDocument['type'],string> = { FAQ:'quiz',CATALOG:'menu_book',POLICY:'policy',PROMO:'sell' };
-const KB_LABEL: Record<KBDocument['type'],string> = { FAQ:'Preguntas Frecuentes',CATALOG:'Catálogo',POLICY:'Política',PROMO:'Promoción' };
+const KB_ICONS: Record<KBDocument['type'],string> = { FAQ:'quiz',CATALOG:'menu_book',POLICY:'policy',PROMO:'sell',SALES_TECHNIQUE:'lightbulb' };
+const KB_LABEL: Record<KBDocument['type'],string> = { FAQ:'Preguntas Frecuentes',CATALOG:'Catálogo',POLICY:'Política',PROMO:'Promoción',SALES_TECHNIQUE:'Técnica Venta' };
 const STATUS_LABEL: Record<OrderStatus,string> = { NEW:'Nuevo',PREPARING:'Preparando',READY:'Listo',DELIVERED:'Entregado' };
 const STATUS_BADGE: Record<OrderStatus,string> = { NEW:'badge-new',PREPARING:'badge-preparing',READY:'badge-ready',DELIVERED:'badge-delivered' };
 
@@ -292,7 +292,7 @@ function DocumentModal({ document, onClose, onSave }: { document?:KBDocument; on
           <div className="form-group" style={{marginBottom:0}}><label className="form-label">Título *</label><input className="form-input" value={title} onChange={e=>setTitle(e.target.value)} placeholder="Ej: Menú Principal 2026"/></div>
           <div className="form-group" style={{marginBottom:0}}><label className="form-label">Tipo</label>
             <select className="form-input" value={type} onChange={e=>setType(e.target.value as KBDocument['type'])}>
-              <option value="CATALOG">📋 Catálogo</option><option value="FAQ">❓ FAQ</option><option value="POLICY">📜 Política</option><option value="PROMO">🎯 Promoción</option>
+              <option value="CATALOG">📋 Catálogo</option><option value="FAQ">❓ FAQ</option><option value="POLICY">📜 Política</option><option value="PROMO">🎯 Promoción</option><option value="SALES_TECHNIQUE">💡 Técnica Venta</option>
             </select>
           </div>
         </div>
@@ -1589,8 +1589,8 @@ function AIKnowledgeView({ showToast, searchQuery }: { showToast:(m:string,t?:To
   const [selected,setSelected]=useState<KBDocument|null>(null);
   const [selectedProduct,setSelectedProduct]=useState<any|null>(null);
   const [systemPrompt,setSystemPrompt]=useState('');
-  const typeColors:Record<KBDocument['type'],string>={FAQ:'badge-new',CATALOG:'badge-active',POLICY:'badge-delivered',PROMO:'badge-preparing'};
-  const iconColors:Record<KBDocument['type'],string>={CATALOG:'indigo',PROMO:'orange',POLICY:'blue',FAQ:'green'};
+  const typeColors:Record<KBDocument['type'],string>={FAQ:'badge-new',CATALOG:'badge-active',POLICY:'badge-delivered',PROMO:'badge-preparing',SALES_TECHNIQUE:'badge-active'};
+  const iconColors:Record<KBDocument['type'],string>={CATALOG:'indigo',PROMO:'orange',POLICY:'blue',FAQ:'green',SALES_TECHNIQUE:'amber'};
 
   const fetchProducts = () => {
     fetch(API_BASE_URL + '/api/tenant/products', {

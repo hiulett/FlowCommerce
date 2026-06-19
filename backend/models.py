@@ -183,7 +183,7 @@ class KnowledgeDocument(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
     title = Column(String(150), nullable=False)
-    type = Column(String(30), nullable=False) # FAQ, CATALOG, POLICY, PROMO
+    type = Column(String(30), nullable=False) # FAQ, CATALOG, POLICY, PROMO, SALES_TECHNIQUE
     content = Column(Text, nullable=True)
     word_count = Column(Integer, default=0)
     status = Column(String(20), default="PENDING") # PENDING, TRAINED
