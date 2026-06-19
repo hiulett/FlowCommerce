@@ -1,6 +1,6 @@
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 // ─── Types ─────────────────────────────────────────────────────────────────────
 type TabKey = 'dashboard' | 'ai-knowledge' | 'chats' | 'orders' | 'customers' | 'settings' | 'super-tenants' | 'super-plans' | 'super-billing' | 'super-ai-keys';
 type SettingsTab = 'business-profile' | 'team-management' | 'whatsapp-integration' | 'billing-security';
