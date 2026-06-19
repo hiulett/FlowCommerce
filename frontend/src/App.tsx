@@ -2082,7 +2082,14 @@ function ChatsView({ showToast, searchQuery }: { showToast:(m:string,t?:ToastMsg
         if (!res.ok) throw new Error('Error al cargar conversaciones');
         return res.json();
       })
-      .then(data => setConversations(data))
+      .then(data => {
+        if (Array.isArray(data)) {
+          setConversations(data);
+        } else {
+          console.error("API no devolvió un arreglo para conversaciones:", data);
+          setConversations([]);
+        }
+      })
       .catch(err => console.error("Error fetching conversations:", err))
       .finally(() => {
         if (!silent) setLoadingConvs(false);
@@ -2098,7 +2105,14 @@ function ChatsView({ showToast, searchQuery }: { showToast:(m:string,t?:ToastMsg
         if (!res.ok) throw new Error('Error al cargar mensajes');
         return res.json();
       })
-      .then(data => setMessages(data))
+      .then(data => {
+        if (Array.isArray(data)) {
+          setMessages(data);
+        } else {
+          console.error("API no devolvió un arreglo para mensajes:", data);
+          setMessages([]);
+        }
+      })
       .catch(err => console.error("Error fetching messages:", err))
       .finally(() => {
         if (!silent) setLoadingMsgs(false);
