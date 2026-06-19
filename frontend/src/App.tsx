@@ -1913,6 +1913,9 @@ function AIKnowledgeView({ showToast, searchQuery }: { showToast:(m:string,t?:To
         <div className="page-header-title"><h2>AI Knowledge Base</h2><p><MI name="psychology"/>Base de conocimiento del asistente IA de WhatsApp</p></div>
         <div className="page-header-actions">
           <button className="btn btn-primary" onClick={()=>{setSelected(null);setModal('upload');}} disabled={isTraining}><MI name="auto_awesome"/>Extraer Catálogo desde Texto</button>
+          <button className="btn btn-secondary" onClick={()=>setModal('train')} disabled={isTraining}>
+            {isTraining ? <><div className="spinner" style={{width: 16, height: 16, borderWidth: 2, marginRight: 8}}></div> Entrenando...</> : <><MI name="psychology"/>Entrenar Modelo</>}
+          </button>
         </div>
       </div>
       <div className="grid grid-cols-4 gap-4" style={{marginBottom:24}}>
