@@ -254,6 +254,92 @@ function DeleteModal({ title, description, onClose, onConfirm }: { title:string;
   );
 }
 
+function SimpleDeleteModal({ title, description, onClose, onConfirm }: { title:string; description:string; onClose:()=>void; onConfirm:()=>void }) {
+  return (
+    <Modal onClose={onClose} size="modal-sm">
+      <ModalHeader icon="delete_forever" iconColor="red" title="Confirmar Eliminación" onClose={onClose}/>
+      <div className="modal-body" style={{textAlign:'center'}}>
+        <div className="modal-confirm-icon danger"><MI name="warning" filled/></div>
+        <h3 style={{fontWeight:700,fontSize:16,marginBottom:8}}>{title}</h3>
+        <p style={{fontSize:13,color:'var(--color-on-surface-variant)',marginBottom:20}}>{description}</p>
+        <div className="inline-alert alert-error" style={{textAlign:'left',marginBottom:16}}><MI name="info"/><span>Esta acción es <strong>irreversible</strong>.</span></div>
+      </div>
+      <div className="modal-footer">
+        <button className="btn btn-outline" onClick={onClose}>No, Cancelar</button>
+        <button className="btn btn-primary" style={{background:'var(--color-error)'}} onClick={()=>{onConfirm();onClose();}}><MI name="delete"/>Sí, Eliminar</button>
+      </div>
+    </Modal>
+  );
+}
+
+// ── Edit Order Modal ─────────────────────────────────────────────────────────────
+function EditOrderModal({ order, onClose, onSave }: { order:Order; onClose:()=>void; onSave:(id:string, updates:Partial<Order>)=>void }) {
+  const [customerName, setCustomerName] = useState(order.customerName);
+  const [phone, setPhone] = useState(order.phone);
+  const [shippingAddress, setShippingAddress] = useState(order.shippingAddress || '');
+  const [deliveryMethod, setDeliveryMethod] = useState(order.deliveryMethod || 'DELIVERY');
+  const [paymentMethod, setPaymentMethod] = useState(order.paymentMethod);
+  const [status, setStatus] = useState<OrderStatus>(order.status);
+  const [total, setTotal] = useState(order.total.toString());
+
+  return (
+    <Modal onClose={onClose} size="modal-lg">
+      <ModalHeader icon="edit_document" iconColor="indigo" title={`Editar Pedido #${order.id}`} subtitle="Modifica los detalles operativos del pedido" onClose={onClose}/>
+      <div className="modal-body">
+        <div className="grid grid-cols-2 gap-4" style={{marginBottom: 16}}>
+          <div className="form-group"><label className="form-label">Nombre del Cliente</label><input className="form-input" value={customerName} onChange={e=>setCustomerName(e.target.value)} /></div>
+          <div className="form-group"><label className="form-label">Teléfono</label><input className="form-input" value={phone} onChange={e=>setPhone(e.target.value)} /></div>
+        </div>
+        
+        <div className="grid grid-cols-2 gap-4" style={{marginBottom: 16}}>
+          <div className="form-group">
+            <label className="form-label">Método de Entrega</label>
+            <select className="form-input" value={deliveryMethod} onChange={e=>setDeliveryMethod(e.target.value as any)}>
+              <option value="DELIVERY">Domicilio (Delivery)</option>
+              <option value="PICKUP">Retiro en Local (Pickup)</option>
+            </select>
+          </div>
+          <div className="form-group">
+            <label className="form-label">Dirección de Envío</label>
+            <input className="form-input" value={shippingAddress} onChange={e=>setShippingAddress(e.target.value)} disabled={deliveryMethod==='PICKUP'} />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-3 gap-4" style={{marginBottom: 16}}>
+          <div className="form-group">
+            <label className="form-label">Estado</label>
+            <select className="form-input" value={status} onChange={e=>setStatus(e.target.value as OrderStatus)}>
+              <option value="NEW">Nuevo</option>
+              <option value="CONFIRMED">Confirmado</option>
+              <option value="PREPARING">En Preparación</option>
+              <option value="READY">Listo / Despacho</option>
+              <option value="SHIPPED">En Camino</option>
+              <option value="DELIVERED">Entregado</option>
+            </select>
+          </div>
+          <div className="form-group">
+            <label className="form-label">Método de Pago</label>
+            <input className="form-input" value={paymentMethod} onChange={e=>setPaymentMethod(e.target.value)} />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Monto Total ($)</label>
+            <input className="form-input" type="number" step="0.01" value={total} onChange={e=>setTotal(e.target.value)} />
+          </div>
+        </div>
+      </div>
+      <div className="modal-footer">
+        <button className="btn btn-outline" onClick={onClose}>Cancelar</button>
+        <button className="btn btn-primary" onClick={()=>{
+          onSave(order.id, {
+            customerName, phone, shippingAddress, deliveryMethod, paymentMethod, status, total: parseFloat(total) || order.total
+          });
+          onClose();
+        }}><MI name="save"/>Guardar Cambios</button>
+      </div>
+    </Modal>
+  );
+}
+
 // ── Document Modal ─────────────────────────────────────────────────────────────
 function DocumentModal({ document, onClose, onSave }: { document?:KBDocument; onClose:()=>void; onSave:(d:Partial<KBDocument>)=>void }) {
   const [title,setTitle]=useState(document?.title??'');
