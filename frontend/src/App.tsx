@@ -3470,7 +3470,17 @@ export function SuperAdminAIKeysView({ showToast, searchQuery }: { showToast: (m
                     </span>
                   </td>
                   <td style={{ fontSize: 12 }}>
-                    {Array.isArray(k.tasks) ? k.tasks.join(', ') : (typeof k.tasks === 'string' ? k.tasks : 'Todas')}
+                    {(() => {
+                      if (Array.isArray(k.tasks)) return k.tasks.join(', ');
+                      if (typeof k.tasks === 'string') {
+                        try {
+                           const parsed = JSON.parse(k.tasks);
+                           if (Array.isArray(parsed)) return parsed.join(', ');
+                        } catch(e) {}
+                        return k.tasks;
+                      }
+                      return 'Todas';
+                    })()}
                   </td>
                   <td style={{ fontSize: 12 }}>
                     ${(k.current_spend || 0).toFixed(4)} {k.spending_limit ? `/ $${k.spending_limit}` : ''}

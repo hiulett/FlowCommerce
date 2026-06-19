@@ -79,7 +79,7 @@ def format_products_context(products: List[Product]) -> str:
     para inyectarlo directamente en el contexto del prompt del LLM.
     """
     if not products:
-        return "No hay productos disponibles actualmente en el stock."
+        return ""
     
     context = "PRODUCTOS DISPONIBLES EN STOCK:\n"
     for p in products:
