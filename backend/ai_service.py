@@ -83,8 +83,13 @@ async def parse_catalog_document_to_products(content: str) -> List[Dict[str, Any
     en una lista de diccionarios de productos.
     """
     import json
+    from openai import OpenAI
     try:
-        model = genai.GenerativeModel("gemini-2.0-flash")
+        client = OpenAI(
+            base_url=settings.OLLAMA_BASE_URL,
+            api_key="ollama"
+        )
+        
         prompt = (
             "Analiza el siguiente texto que contiene un catálogo o menú de productos y extrae "
             "todos los productos en formato JSON. Cada producto debe tener los siguientes campos:\n"
@@ -93,11 +98,17 @@ async def parse_catalog_document_to_products(content: str) -> List[Dict[str, Any
             "- price: Precio numérico decimal (ej: 14.99)\n"
             "- stock: Cantidad disponible (usa 10 por defecto si no se menciona)\n"
             "- category: Categoría del producto (ej: 'Pizzas', 'Bebidas')\n\n"
-            "Retorna EXCLUSIVAMENTE un arreglo JSON válido. No uses markdown, no añadas explicaciones.\n\n"
+            "Retorna EXCLUSIVAMENTE un arreglo JSON válido sin markdown.\n\n"
             f"Texto:\n{content}"
         )
-        response = model.generate_content(prompt)
-        text = response.text.strip()
+        
+        response = client.chat.completions.create(
+            model="qwen2.5:3b",
+            messages=[{"role": "user", "content": prompt}],
+            response_format={"type": "json_object"}
+        )
+        
+        text = response.choices[0].message.content.strip()
         if text.startswith("```json"):
             text = text.split("```json")[1].split("```")[0].strip()
         elif text.startswith("```"):
