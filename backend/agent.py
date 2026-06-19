@@ -154,27 +154,26 @@ async def run_conversational_agent(
     products_context = format_products_context(relevant_products)
     print(f"[IA] Búsqueda semántica (RAG) completada. Se encontraron {len(relevant_products)} productos relevantes para incluir en el contexto.")
 
-    # 2.5. Recuperar e inyectar documentos de la base de conocimiento entrenados (RAG)
-    kb_context = ""
-    trained_docs = db.query(KnowledgeDocument).filter(
-        and_(
-            KnowledgeDocument.tenant_id == tenant.id,
-            KnowledgeDocument.status == "TRAINED"
-        )
-    ).all()
-    if trained_docs:
-        kb_context = "\nINFORMACIÓN ADICIONAL DEL NEGOCIO (PREGUNTAS FRECUENTES, POLÍTICAS Y PROMOCIONES):\n"
-        for doc in trained_docs:
-            kb_context += f"--- Documento: {doc.title} (Tipo: {doc.type}) ---\n{doc.content}\n\n"
+    # 2.5. Configurar directrices de negocio (Base de Conocimiento)
+    business_rules_context = ""
+    if tenant.business_rules:
+        business_rules_context = f"\nREGLAS DEL NEGOCIO (POLÍTICAS, HORARIOS, ENVÍOS):\n{tenant.business_rules}\n"
+        
+    sales_techniques_context = ""
+    if tenant.sales_techniques:
+        sales_techniques_context = f"\nTÉCNICAS DE VENTA Y PERSONALIDAD:\n{tenant.sales_techniques}\n"
 
     # 3. Construir el prompt del sistema
     system_prompt = (
         f"{tenant.ai_system_prompt or 'Eres un asistente virtual de ventas amable.'}\n\n"
-        f"CONTEXTO DE NEGOCIO Y STOCK ACTUAL:\n"
+        f"{sales_techniques_context}"
+        f"CATÁLOGO DE PRODUCTOS:\n"
         f"{products_context}\n"
-        f"{kb_context}\n"
-        f"REGLAS OBLIGATORIAS:\n"
-        f"- Basa tus respuestas EXCLUSIVAMENTE en el CONTEXTO DE NEGOCIO y la INFORMACIÓN ADICIONAL provista arriba.\n"
+        f"{business_rules_context}"
+        f"\nREGLAS OBLIGATORIAS:\n"
+        f"- Eres estrictamente el vendedor de esta tienda y de ninguna otra. Solo ofrecerás los productos listados en el CATÁLOGO DE PRODUCTOS.\n"
+        f"- Responde respetando las TÉCNICAS DE VENTA Y PERSONALIDAD.\n"
+        f"- Si el cliente pregunta por zonas de envío, horarios o pagos, básate únicamente en las REGLAS DEL NEGOCIO.\n"
         f"- Si el cliente te pide comprar o agregar productos, debes invocar la herramienta correspondiente (Function Calling).\n"
         f"- Si el sistema nativo de tools falla, puedes escribir en tu mensaje: <function(nombre_funcion)>{{\"arg1\":\"val\"}}</function>\n"
         f"- Nunca inventes precios o stock. Si un producto no tiene stock, infórmalo educadamente.\n"

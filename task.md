@@ -1,0 +1,21 @@
+# Tareas de Implementación: Banco de Información Unificado
+
+- `[x]` **1. Actualización de Modelos de Base de Datos**
+  - `[x]` Agregar columnas `business_rules` y `sales_techniques` a la tabla `Tenant` (en `backend/models.py`).
+  - `[x]` Ejecutar script de migración en la base de datos (Ej: `ALTER TABLE tenants ADD COLUMN business_rules TEXT...`).
+- `[x]` **2. Modificación de Rutas (Backend API)**
+  - `[x]` Modificar el endpoint de actualización de Tenant para aceptar y guardar las nuevas columnas (`business_rules`, `sales_techniques`).
+  - `[x]` Adaptar la ruta de entrenamiento de documentos si es necesario para convertir texto libre en productos directamente.
+- `[x]` **3. Refactorización del Prompt del Sistema (Agente IA)**
+  - `[x]` Abrir `backend/agent.py`.
+  - `[x]` Eliminar la inyección cíclica de `KnowledgeDocument`.
+  - `[x]` Crear la nueva estructura del `system_prompt` segmentada por bloques lógicos (Técnicas de venta, Reglas de negocio, Catálogo RAG).
+- `[x]` **4. Rediseño del Frontend (React)**
+  - `[x]` Modificar `frontend/src/App.tsx` en la vista de `AI Knowledge`.
+  - `[x]` Eliminar la tabla antigua de "Documentos subidos".
+  - `[x]` Crear tarjetas/paneles interactivos para que el usuario redacte: Reglas de Negocio, Directrices de Venta, etc.
+  - `[x]` Conectar los nuevos paneles a la API para guardarlos en la configuración del Tenant.
+- `[ ]` **5. Pruebas y Validación**
+  - `[ ]` Configurar reglas en la UI.
+  - `[ ]` Enviar mensajes de prueba simulados y verificar que la IA responde con las nuevas reglas.
+  - `[ ]` Validar que el Catálogo sigue extrayéndose correctamente.

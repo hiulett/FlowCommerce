@@ -39,6 +39,8 @@ def startup_db_migration():
         db.execute(text("ALTER TABLE platform_ai_keys ADD COLUMN IF NOT EXISTS spending_limit NUMERIC(10, 2) DEFAULT NULL;"))
         db.execute(text("ALTER TABLE platform_ai_keys ADD COLUMN IF NOT EXISTS current_spend NUMERIC(10, 6) DEFAULT 0.0;"))
         db.execute(text("ALTER TABLE tenants ADD COLUMN IF NOT EXISTS ai_spending_limit NUMERIC(10, 2) DEFAULT NULL;"))
+        db.execute(text("ALTER TABLE tenants ADD COLUMN IF NOT EXISTS business_rules TEXT;"))
+        db.execute(text("ALTER TABLE tenants ADD COLUMN IF NOT EXISTS sales_techniques TEXT;"))
         db.commit()
         print("[MIGRATION] Startup database migrations completed successfully.")
     except Exception as e:
@@ -494,6 +496,8 @@ class TenantSettingsUpdate(BaseModel):
     whatsapp_access_token: str = None
     ai_system_prompt: str = None
     ai_spending_limit: float = None
+    business_rules: str = None
+    sales_techniques: str = None
 
 class DocumentCreateUpdate(BaseModel):
     title: str
@@ -532,7 +536,9 @@ def get_tenant_settings(db: Session = Depends(get_tenant_db)):
         "whatsapp_phone_id": tenant.whatsapp_phone_id or "",
         "whatsapp_access_token": tenant.whatsapp_access_token or "",
         "ai_system_prompt": tenant.ai_system_prompt or "",
-        "ai_paused": tenant.ai_paused or False
+        "ai_paused": tenant.ai_paused or False,
+        "business_rules": tenant.business_rules or "",
+        "sales_techniques": tenant.sales_techniques or ""
     }
 
 @app.put("/api/tenant/settings")
@@ -546,6 +552,10 @@ def update_tenant_settings(data: TenantSettingsUpdate, db: Session = Depends(get
         tenant.whatsapp_access_token = data.whatsapp_access_token
     if data.ai_system_prompt is not None:
         tenant.ai_system_prompt = data.ai_system_prompt
+    if data.business_rules is not None:
+        tenant.business_rules = data.business_rules
+    if data.sales_techniques is not None:
+        tenant.sales_techniques = data.sales_techniques
     db.commit()
     db.refresh(tenant)
     return tenant

@@ -1696,6 +1696,8 @@ function AIKnowledgeView({ showToast, searchQuery }: { showToast:(m:string,t?:To
   const [selected,setSelected]=useState<KBDocument|null>(null);
   const [selectedProduct,setSelectedProduct]=useState<any|null>(null);
   const [systemPrompt,setSystemPrompt]=useState('');
+  const [businessRules, setBusinessRules] = useState('');
+  const [salesTechniques, setSalesTechniques] = useState('');
   const typeColors:Record<KBDocument['type'],string>={FAQ:'badge-new',CATALOG:'badge-active',POLICY:'badge-delivered',PROMO:'badge-preparing',SALES_TECHNIQUE:'badge-active'};
   const iconColors:Record<KBDocument['type'],string>={CATALOG:'indigo',PROMO:'orange',POLICY:'blue',FAQ:'green',SALES_TECHNIQUE:'amber'};
 
@@ -1754,24 +1756,34 @@ function AIKnowledgeView({ showToast, searchQuery }: { showToast:(m:string,t?:To
         if (settings.ai_system_prompt) {
           setSystemPrompt(settings.ai_system_prompt);
         }
+        if (settings.business_rules) {
+          setBusinessRules(settings.business_rules);
+        }
+        if (settings.sales_techniques) {
+          setSalesTechniques(settings.sales_techniques);
+        }
       })
       .catch(err => console.error("Error fetching settings:", err));
   }, []);
 
-  const handleSavePrompt = () => {
+  const handleSaveSettings = () => {
     fetch(API_BASE_URL + '/api/tenant/settings', {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
         'X-Tenant-ID': '40446806-0107-6201-9310-c9943efb3870'
       },
-      body: JSON.stringify({ ai_system_prompt: systemPrompt })
+      body: JSON.stringify({ 
+        ai_system_prompt: systemPrompt,
+        business_rules: businessRules,
+        sales_techniques: salesTechniques
+      })
     })
       .then(res => res.json())
       .then(() => {
-        showToast('System Prompt guardado correctamente', 'success');
+        showToast('Configuración del Banco de Información guardada', 'success');
       })
-      .catch(err => console.error("Error saving prompt:", err));
+      .catch(err => console.error("Error saving settings:", err));
   };
 
   const handleSaveDoc = (data: Partial<KBDocument>) => {
@@ -1900,57 +1912,46 @@ function AIKnowledgeView({ showToast, searchQuery }: { showToast:(m:string,t?:To
       <div className="page-header">
         <div className="page-header-title"><h2>AI Knowledge Base</h2><p><MI name="psychology"/>Base de conocimiento del asistente IA de WhatsApp</p></div>
         <div className="page-header-actions">
-          <button className="btn btn-primary" onClick={()=>{setSelected(null);setModal('upload');}} disabled={isTraining}><MI name="upload_file"/>Cargar Documento</button>
-          <button className="btn btn-secondary" onClick={()=>setModal('train')} disabled={isTraining}>
-            {isTraining ? <><div className="spinner" style={{width: 16, height: 16, borderWidth: 2, marginRight: 8}}></div> Entrenando...</> : <><MI name="auto_awesome"/>Entrenar Modelo</>}
-          </button>
+          <button className="btn btn-primary" onClick={()=>{setSelected(null);setModal('upload');}} disabled={isTraining}><MI name="auto_awesome"/>Extraer Catálogo desde Texto</button>
         </div>
       </div>
       <div className="grid grid-cols-4 gap-4" style={{marginBottom:24}}>
-        {[{label:'Documentos',value:docs.length.toString(),icon:'description',color:'indigo'},{label:'Entrenados',value:docs.filter(d=>d.status==='TRAINED').length.toString(),icon:'check_circle',color:'green'},{label:'Pendientes',value:docs.filter(d=>d.status==='PENDING').length.toString(),icon:'pending',color:'orange'},{label:'Palabras',value:docs.reduce((s,d)=>s+d.wordCount,0).toLocaleString(),icon:'text_fields',color:'blue'}].map(s=>(
+        {[{label:'Productos en Catálogo',value:products.length.toString(),icon:'restaurant_menu',color:'indigo'},{label:'Reglas de Negocio',value:businessRules ? 'Activado' : 'Inactivo',icon:'gavel',color:'blue'},{label:'Técnicas Venta',value:salesTechniques ? 'Activado' : 'Inactivo',icon:'record_voice_over',color:'amber'},{label:'Modelo',value:'Gemini',icon:'smart_toy',color:'green'}].map(s=>(
           <div key={s.label} className="stat-card"><div className={`stat-icon ${s.color}`}><MI name={s.icon} filled/></div><div><div className="stat-label">{s.label}</div><div className="stat-value" style={{fontSize:22}}>{s.value}</div></div></div>
         ))}
       </div>
       <div className="grid grid-cols-2 gap-6">
-        <div className="card"><div className="nexus-indicator"/><div className="card-body">
-          <div className="section-title"><MI name="folder_open"/>Documentos</div>
-          <div className="space-y">{filteredDocs.map(doc=>(
-            <div key={doc.id} className="kb-card">
-              <div className="kb-card-header">
-                <div className={`kb-icon ${iconColors[doc.type]}`}><MI name={KB_ICONS[doc.type]}/></div>
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontWeight:700,fontSize:14,marginBottom:2}}>{doc.title}</div>
-                  <div style={{display:'flex',alignItems:'center',gap:8}}><span className={`badge ${typeColors[doc.type]}`}>{KB_LABEL[doc.type]}</span><span style={{fontSize:11,color:'var(--color-on-surface-variant)'}}>{doc.wordCount.toLocaleString()} palabras</span></div>
-                </div>
-                <span className={`badge ${doc.status==='TRAINED'?'badge-active':doc.status==='TRAINING'?'badge-preparing':'badge-delivered'}`}>
-                  {doc.status==='TRAINED'?'✓ Entrenado':doc.status==='TRAINING'?'🔄 Entrenando...':'⏳ Pendiente'}
-                </span>
-              </div>
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                <span style={{fontSize:11,color:'var(--color-outline)'}}><MI name="schedule" style={{fontSize:13,verticalAlign:'middle'}}/> {doc.lastUpdated}</span>
-                <div style={{display:'flex',gap:6}}>
-                  <button className="btn btn-ghost" style={{padding:'4px 10px',fontSize:12}} onClick={()=>{setSelected(doc);setModal('edit');}}><MI name="edit" style={{fontSize:15}}/>Editar</button>
-                  <button className="btn btn-ghost" style={{padding:'4px 10px',fontSize:12,color:'var(--color-error)'}} onClick={()=>{setSelected(doc);setModal('delete');}}><MI name="delete" style={{fontSize:15}}/></button>
-                </div>
-              </div>
-            </div>
-          ))}</div>
-        </div></div>
         <div style={{display:'flex',flexDirection:'column',gap:20}}>
           <div className="card"><div className="nexus-indicator"/><div className="card-body">
-            <div className="section-title"><MI name="smart_toy"/>System Prompt</div>
-            <div className="form-group" style={{marginBottom:16}}><label className="form-label">Instrucciones Maestras</label>
-              <textarea className="form-input" rows={12} value={systemPrompt} onChange={e=>setSystemPrompt(e.target.value)} style={{fontFamily:"'JetBrains Mono',monospace",fontSize:12, minHeight: '220px'}}/>
-              <div className="form-hint">Define la personalidad e instrucciones del agente de WhatsApp.</div>
+            <div className="section-title"><MI name="gavel"/>Reglas del Negocio</div>
+            <div className="form-group" style={{marginBottom:16}}>
+              <textarea className="form-input" rows={6} value={businessRules} onChange={e=>setBusinessRules(e.target.value)} style={{fontSize:13, minHeight: '120px'}} placeholder="Ej: Atendemos de 8am a 10pm. Entregamos solo en el Centro..."/>
+              <div className="form-hint">Horarios, envíos, métodos de pago y políticas operativas.</div>
             </div>
-            <button className="btn btn-primary" style={{width:'100%'}} onClick={handleSavePrompt}><MI name="save"/>Guardar Prompt</button>
+          </div></div>
+
+          <div className="card"><div className="nexus-indicator"/><div className="card-body">
+            <div className="section-title"><MI name="record_voice_over"/>Técnicas de Venta y Personalidad</div>
+            <div className="form-group" style={{marginBottom:16}}>
+              <textarea className="form-input" rows={6} value={salesTechniques} onChange={e=>setSalesTechniques(e.target.value)} style={{fontSize:13, minHeight: '120px'}} placeholder="Ej: Sé amable, usa emojis, siempre ofrece la promoción de 2x1..."/>
+              <div className="form-hint">Tono del asistente, técnicas de upselling y estilo de conversación.</div>
+            </div>
+          </div></div>
+        </div>
+        
+        <div style={{display:'flex',flexDirection:'column',gap:20}}>
+          <div className="card"><div className="nexus-indicator"/><div className="card-body">
+            <div className="section-title"><MI name="smart_toy"/>System Prompt (Prompt Maestro)</div>
+            <div className="form-group" style={{marginBottom:16}}>
+              <textarea className="form-input" rows={8} value={systemPrompt} onChange={e=>setSystemPrompt(e.target.value)} style={{fontFamily:"'JetBrains Mono',monospace",fontSize:12, minHeight: '140px'}}/>
+              <div className="form-hint">Instrucciones base de IA. (Las Reglas, Técnicas y Catálogo se inyectan automáticamente).</div>
+            </div>
+            <button className="btn btn-primary" style={{width:'100%'}} onClick={handleSaveSettings}><MI name="save"/>Guardar Configuración del Banco</button>
           </div></div>
           <div className="card" style={{background:'linear-gradient(135deg,var(--color-primary-container),var(--color-secondary-container))'}}>
             <div className="card-body">
-              <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:12}}><MI name="psychology" style={{color:'white',fontSize:28}}/><div><div style={{fontWeight:700,color:'white',fontSize:15}}>Estado del Modelo IA</div><div style={{color:'rgba(255,255,255,0.75)',fontSize:12}}>Nexus Intelligence v2.1</div></div></div>
-              {[{label:'Precisión',value:'94.2%'},{label:'Mensajes Hoy',value:'1,284'},{label:'Conversaciones Activas',value:'42'}].map(m=>(
-                <div key={m.label} style={{display:'flex',justifyContent:'space-between',marginBottom:6}}><span style={{color:'rgba(255,255,255,0.75)',fontSize:13}}>{m.label}</span><span style={{color:'white',fontWeight:700,fontSize:13}}>{m.value}</span></div>
-              ))}
+              <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:12}}><MI name="psychology" style={{color:'white',fontSize:28}}/><div><div style={{fontWeight:700,color:'white',fontSize:15}}>Aislamiento de Tenant (Multi-Tenancy)</div><div style={{color:'rgba(255,255,255,0.75)',fontSize:12}}>Seguridad Activada</div></div></div>
+              <p style={{color:'rgba(255,255,255,0.9)',fontSize:12,margin:0,lineHeight:1.5}}>Toda la información ingresada en este Banco de Conocimiento es <b>privada</b> y se restringe a nivel base de datos para este negocio específico. La IA de otros locales no tiene acceso a esta bóveda.</p>
             </div>
           </div>
         </div>
