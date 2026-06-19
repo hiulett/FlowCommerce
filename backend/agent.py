@@ -317,6 +317,10 @@ async def run_conversational_agent(
                         messages=messages
                     )
                     final_text = final_response.choices[0].message.content
+                    if not final_text or not str(final_text).strip():
+
+                        final_text = f'✅ Acción completada: {text_tool_result}'
+
                     print(f"[IA] Respuesta final post-herramienta (OpenAI-Texto) generada: '{final_text}'")
                     if key_id:
                         balancer.update_last_used(db, key_id)
@@ -374,6 +378,10 @@ async def run_conversational_agent(
                         messages=messages
                     )
                     final_text = final_response.choices[0].message.content
+                    if not final_text or not str(final_text).strip():
+
+                        final_text = f'✅ Acción completada: {tool_result}'
+
                     print(f"[IA] Respuesta final post-herramienta (OpenAI) generada: '{final_text}'")
                     if key_id:
                         balancer.update_last_used(db, key_id)
@@ -420,6 +428,10 @@ async def run_conversational_agent(
                         messages=messages
                     )
                     final_text = clean_ai_response(final_response.choices[0].message.content)
+                    if not final_text or not str(final_text).strip():
+
+                        final_text = f'✅ Acción completada: {text_tool_result}'
+
                     print(f"[IA] Respuesta final post-herramienta (DeepSeek-Texto) generada: '{final_text}'")
                     if key_id:
                         balancer.update_last_used(db, key_id)
@@ -477,6 +489,10 @@ async def run_conversational_agent(
                         messages=messages
                     )
                     final_text = clean_ai_response(final_response.choices[0].message.content)
+                    if not final_text or not str(final_text).strip():
+
+                        final_text = f'✅ Acción completada: {tool_result}'
+
                     print(f"[IA] Respuesta final post-herramienta (DeepSeek) generada: '{final_text}'")
                     if key_id:
                         balancer.update_last_used(db, key_id)
@@ -525,6 +541,10 @@ async def run_conversational_agent(
                         messages=messages
                     )
                     final_text = final_response.choices[0].message.content
+                    if not final_text or not str(final_text).strip():
+
+                        final_text = f'✅ Acción completada: {text_tool_result}'
+
                     print(f"[IA] Respuesta final post-herramienta (Groq-Texto) generada: '{final_text}'")
                     if key_id:
                         balancer.update_last_used(db, key_id)
@@ -582,6 +602,10 @@ async def run_conversational_agent(
                         messages=messages
                     )
                     final_text = final_response.choices[0].message.content
+                    if not final_text or not str(final_text).strip():
+
+                        final_text = f'✅ Acción completada: {tool_result}'
+
                     print(f"[IA] Respuesta final post-herramienta (Groq) generada: '{final_text}'")
                     if key_id:
                         balancer.update_last_used(db, key_id)
@@ -635,6 +659,10 @@ async def run_conversational_agent(
                         extra_headers=extra_headers
                     )
                     final_text = final_response.choices[0].message.content
+                    if not final_text or not str(final_text).strip():
+
+                        final_text = f'✅ Acción completada: {text_tool_result}'
+
                     print(f"[IA] Respuesta final post-herramienta (OpenRouter-Texto) generada: '{final_text}'")
                     if key_id:
                         balancer.update_last_used(db, key_id)
@@ -693,6 +721,10 @@ async def run_conversational_agent(
                         extra_headers=extra_headers
                     )
                     final_text = final_response.choices[0].message.content
+                    if not final_text or not str(final_text).strip():
+
+                        final_text = f'✅ Acción completada: {tool_result}'
+
                     print(f"[IA] Respuesta final post-herramienta (OpenRouter) generada: '{final_text}'")
                     if key_id:
                         balancer.update_last_used(db, key_id)
@@ -746,6 +778,10 @@ async def run_conversational_agent(
                         messages=messages
                     )
                     final_text = final_response.choices[0].message.content
+                    if not final_text or not str(final_text).strip():
+
+                        final_text = f'✅ Acción completada: {text_tool_result}'
+
                     print(f"[IA] Respuesta final post-herramienta (DeepSeek-Texto) generada: '{final_text}'")
                     if key_id:
                         balancer.update_last_used(db, key_id)
@@ -811,6 +847,10 @@ async def run_conversational_agent(
                         messages=messages
                     )
                     final_text = final_response.choices[0].message.content
+                    if not final_text or not str(final_text).strip():
+
+                        final_text = f'✅ Acción completada: {tool_result}'
+
                     print(f"[IA] Respuesta final post-herramienta (DeepSeek) generada: '{final_text}'")
                     if key_id:
                         balancer.update_last_used(db, key_id)
@@ -869,6 +909,10 @@ async def run_conversational_agent(
                     contents.append({"role": "user", "parts": [f"Resultado de {func_name}: {text_tool_result}"]})
                     final_response = model.generate_content(contents)
                     final_text = final_response.text
+                    if not final_text or not str(final_text).strip():
+
+                        final_text = f'✅ Acción completada: {text_tool_result}'
+
                     print(f"[IA] Respuesta final post-herramienta (Gemini-Texto) generada: '{final_text}'")
                     if key_id:
                         balancer.update_last_used(db, key_id)
