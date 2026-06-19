@@ -1692,7 +1692,7 @@ function DashboardView({ orders, showToast, searchQuery }: { orders:Order[]; sho
 function AIKnowledgeView({ showToast, searchQuery }: { showToast:(m:string,t?:ToastMsg['type'])=>void; searchQuery:string }) {
   const [docs,setDocs]=useState<KBDocument[]>([]);
   const [products,setProducts]=useState<any[]>([]);
-  const [modal,setModal]=useState<'upload'|'edit'|'delete'|'train'|'deleteProduct'|null>(null);
+  const [modal,setModal]=useState<'upload'|'edit'|'delete'|'train'|'deleteProduct'|'deleteAllProducts'|null>(null);
   const [selected,setSelected]=useState<KBDocument|null>(null);
   const [selectedProduct,setSelectedProduct]=useState<any|null>(null);
   const [systemPrompt,setSystemPrompt]=useState('');
@@ -1875,6 +1875,19 @@ function AIKnowledgeView({ showToast, searchQuery }: { showToast:(m:string,t?:To
       .catch(err => console.error("Error deleting product:", err));
   };
 
+  const handleDeleteAllProducts = () => {
+    fetch(`${API_BASE_URL}/api/tenant/products`, {
+      method: 'DELETE',
+      headers: { 'X-Tenant-ID': '40446806-0107-6201-9310-c9943efb3870' }
+    })
+      .then(() => {
+        setProducts([]);
+        showToast('Todos los productos eliminados', 'success');
+        setModal(null);
+      })
+      .catch(err => console.error("Error deleting all products:", err));
+  };
+
   const filteredDocs = docs.filter(d => {
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
@@ -1946,7 +1959,14 @@ function AIKnowledgeView({ showToast, searchQuery }: { showToast:(m:string,t?:To
       <div className="card" style={{marginTop: 24}}>
         <div className="nexus-indicator"/>
         <div className="card-body">
-          <div className="section-title"><MI name="restaurant_menu"/>Catálogo de Productos Extraídos por IA</div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <div className="section-title" style={{ margin: 0 }}><MI name="restaurant_menu"/>Catálogo de Productos Extraídos por IA</div>
+            {products.length > 0 && (
+              <button className="btn btn-outline" style={{ color: 'var(--color-error)', borderColor: 'var(--color-error)' }} onClick={() => setModal('deleteAllProducts')}>
+                <MI name="delete_sweep"/> Borrar Todos
+              </button>
+            )}
+          </div>
           <p style={{fontSize: 13, color: 'var(--color-outline)', marginBottom: 16}}>
             La IA extrae automáticamente los productos, precios y categorías desde tus documentos de tipo "CATALOG" o "Menú" cuando entrenas el modelo. Estos productos se utilizan para sugerencias y ventas directas en WhatsApp.
           </p>
@@ -1987,6 +2007,7 @@ function AIKnowledgeView({ showToast, searchQuery }: { showToast:(m:string,t?:To
       {(modal==='upload'||modal==='edit')&&<DocumentModal document={modal==='edit'?selected??undefined:undefined} onClose={()=>setModal(null)} onSave={handleSaveDoc}/>}
       {modal==='delete'&&selected&&<DeleteModal title={`¿Eliminar "${selected.title}"?`} description="Se eliminará de la base de conocimiento." onClose={()=>setModal(null)} onConfirm={handleDeleteDoc}/>}
       {modal==='deleteProduct'&&selectedProduct&&<DeleteModal title={`¿Eliminar "${selectedProduct.name}"?`} description="Este producto ya no estará disponible para la IA." onClose={()=>setModal(null)} onConfirm={handleDeleteProduct}/>}
+      {modal==='deleteAllProducts'&&<DeleteModal title="¿Eliminar todos los productos?" description="Esto eliminará todo el catálogo extraído por IA. Deberás volver a entrenar el modelo para regenerarlo." onClose={()=>setModal(null)} onConfirm={handleDeleteAllProducts}/>}
       {modal==='train'&&<TrainModelModal onClose={()=>setModal(null)} showToast={handleTrainModel}/>}
     </div>
   );

@@ -875,6 +875,15 @@ def delete_tenant_product(product_id: str, db: Session = Depends(get_tenant_db))
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid product ID")
 
+@app.delete("/api/tenant/products")
+def delete_all_tenant_products(db: Session = Depends(get_tenant_db)):
+    from backend.models import Product
+    products = db.query(Product).filter(Product.is_active == True).all()
+    for prod in products:
+        prod.is_active = False
+    db.commit()
+    return {"status": "deleted", "count": len(products)}
+
 from backend.events import notify_new_order, serialize_order_for_frontend, order_subscribers
 import asyncio
 from fastapi.responses import StreamingResponse

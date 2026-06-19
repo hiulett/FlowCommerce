@@ -150,7 +150,7 @@ async def run_conversational_agent(
     # 2. Generar embedding del mensaje del usuario y buscar productos similares (RAG)
     print(f"[IA] Iniciando búsqueda semántica para el mensaje: '{user_message}'")
     msg_embedding = await get_embedding(user_message)
-    relevant_products = search_products_semantic(db, tenant.id, msg_embedding, limit=4)
+    relevant_products = search_products_semantic(db, tenant.id, msg_embedding, limit=30)
     products_context = format_products_context(relevant_products)
     print(f"[IA] Búsqueda semántica (RAG) completada. Se encontraron {len(relevant_products)} productos relevantes para incluir en el contexto.")
 
