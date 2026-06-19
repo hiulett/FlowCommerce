@@ -265,8 +265,8 @@ function SimpleDeleteModal({ title, description, onClose, onConfirm }: { title:s
         <div className="inline-alert alert-error" style={{textAlign:'left',marginBottom:16}}><MI name="info"/><span>Esta acción es <strong>irreversible</strong>.</span></div>
       </div>
       <div className="modal-footer">
-        <button className="btn btn-outline" onClick={onClose}>No, Cancelar</button>
-        <button className="btn btn-primary" style={{background:'var(--color-error)'}} onClick={()=>{onConfirm();onClose();}}><MI name="delete"/>Sí, Eliminar</button>
+        <button type="button" className="btn btn-outline" onClick={onClose}>No, Cancelar</button>
+        <button type="button" className="btn btn-primary" style={{background:'var(--color-error)'}} onClick={()=>{onConfirm();onClose();}}><MI name="delete"/>Sí, Eliminar</button>
       </div>
     </Modal>
   );
@@ -274,13 +274,15 @@ function SimpleDeleteModal({ title, description, onClose, onConfirm }: { title:s
 
 // ── Edit Order Modal ─────────────────────────────────────────────────────────────
 function EditOrderModal({ order, onClose, onSave }: { order:Order; onClose:()=>void; onSave:(id:string, updates:Partial<Order>)=>void }) {
-  const [customerName, setCustomerName] = useState(order.customerName);
-  const [phone, setPhone] = useState(order.phone);
-  const [shippingAddress, setShippingAddress] = useState(order.shippingAddress || '');
-  const [deliveryMethod, setDeliveryMethod] = useState(order.deliveryMethod || 'DELIVERY');
-  const [paymentMethod, setPaymentMethod] = useState(order.paymentMethod);
-  const [status, setStatus] = useState<OrderStatus>(order.status);
-  const [total, setTotal] = useState(order.total.toString());
+  const [customerName, setCustomerName] = useState(order?.customerName || '');
+  const [phone, setPhone] = useState(order?.phone || '');
+  const [shippingAddress, setShippingAddress] = useState(order?.shippingAddress || '');
+  const [deliveryMethod, setDeliveryMethod] = useState(order?.deliveryMethod || 'DELIVERY');
+  const [paymentMethod, setPaymentMethod] = useState(order?.paymentMethod || 'Efectivo');
+  const [status, setStatus] = useState<OrderStatus>(order?.status || 'NEW');
+  const [total, setTotal] = useState(order?.total?.toString() || '0');
+
+  if (!order) return null;
 
   return (
     <Modal onClose={onClose} size="modal-lg">
