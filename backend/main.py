@@ -73,22 +73,38 @@ def verify_webhook(
     if hub_mode == "subscribe" and hub_verify_token == settings.WHATSAPP_VERIFY_TOKEN:
         return hub_challenge
     raise HTTPException(status_code=403, detail="Invalid verification token")
+@app.post("/webhooks/whatsapp")
+async def webhook_post(request: Request, background_tasks: BackgroundTasks):
+    # Validamos y parseamos el JSON de forma manual para evitar 422 si Meta envía campos extra/distintos
+    try:
+        payload = await request.json()
+    except:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+    
+    background_tasks.add_task(process_whatsapp_event, payload)
+    return {"status": "ok"}
 
-async def process_whatsapp_event(payload: WhatsAppWebhookPayload):
+async def process_whatsapp_event(payload: dict):
     """
     Procesa de forma asíncrona el mensaje entrante de WhatsApp,
     usando Row-Level Security (RLS) y guardando los logs correspondientes.
     """
     db = SessionLocal()
     try:
-        for entry in payload.entry:
-            for change in entry.changes:
-                value = change.value
-                if not value.messages:
+        entries = payload.get("entry", [])
+        for entry in entries:
+            changes = entry.get("changes", [])
+            for change in changes:
+                value = change.get("value", {})
+                messages = value.get("messages", [])
+                
+                if not messages:
+                    # Probablemente un status update (read, delivered, etc)
                     continue
                 
                 # Obtener metadatos del destinatario
-                phone_id = value.metadata.get("phone_number_id")
+                metadata = value.get("metadata", {})
+                phone_id = metadata.get("phone_number_id")
                 print(f"[WEBHOOK] Evento de WhatsApp recibido. Metadata Phone ID: {phone_id}")
                 
                 # Buscar el Tenant correspondiente
@@ -104,20 +120,23 @@ async def process_whatsapp_event(payload: WhatsAppWebhookPayload):
                 db.execute(text("SET LOCAL app.current_tenant_id = :tenant_id"), {"tenant_id": str(tenant.id)})
                 
                 # Procesar cada mensaje en el webhook
-                for msg in value.messages:
+                for msg in messages:
+                    msg_id = msg.get("id")
                     # Deduplicar
-                    if is_duplicate_message(msg.id):
-                        print(f"[WEBHOOK] Mensaje duplicado omitido: {msg.id}")
+                    if is_duplicate_message(msg_id):
+                        print(f"[WEBHOOK] Mensaje duplicado omitido: {msg_id}")
                         continue
                     
-                    sender_phone = msg.from_
+                    sender_phone = msg.get("from")
                     profile_name = None
-                    if value.contacts:
-                        contact = next((c for c in value.contacts if c.wa_id == sender_phone), None)
+                    contacts = value.get("contacts", [])
+                    if contacts:
+                        contact = next((c for c in contacts if c.get("wa_id") == sender_phone), None)
                         if contact:
-                            profile_name = contact.profile.get("name")
+                            profile = contact.get("profile", {})
+                            profile_name = profile.get("name")
                     
-                    print(f"[WEBHOOK] Procesando mensaje ID {msg.id} de cliente {sender_phone} ({profile_name or 'Sin Nombre'})")
+                    print(f"[WEBHOOK] Procesando mensaje ID {msg_id} de cliente {sender_phone} ({profile_name or 'Sin Nombre'})")
                     
                     # Registrar/Actualizar cliente
                     customer = get_or_create_customer(db, tenant.id, sender_phone, profile_name)
@@ -127,12 +146,15 @@ async def process_whatsapp_event(payload: WhatsAppWebhookPayload):
                     
                     # Guardar mensaje
                     content = ""
-                    msg_type = msg.type.upper()
-                    if msg.text:
-                        content = msg.text.body
-                    elif msg.location:
-                        lat = msg.location.latitude
-                        lon = msg.location.longitude
+                    msg_type = msg.get("type", "").upper()
+                    
+                    if msg_type == "TEXT":
+                        text_obj = msg.get("text", {})
+                        content = text_obj.get("body", "")
+                    elif msg_type == "LOCATION":
+                        loc_obj = msg.get("location", {})
+                        lat = loc_obj.get("latitude")
+                        lon = loc_obj.get("longitude")
                         content = f"Ubicación recibida: Lat {lat}, Lon {lon}"
                         
                         # Buscar el último pedido activo del cliente para asociarle la ubicación
