@@ -393,6 +393,23 @@ class DocumentCreateUpdate(BaseModel):
 class OrderStatusUpdate(BaseModel):
     status: str
 
+class SimulateOrderRequest(BaseModel):
+    customerName: str
+    phone: str
+    paymentMethod: str
+    items: list
+    total: float
+    deliveryMethod: str
+    shippingAddress: str = None
+
+class UpdateOrderRequest(BaseModel):
+    customerName: str = None
+    phone: str = None
+    paymentMethod: str = None
+    total: float = None
+    deliveryMethod: str = None
+    shippingAddress: str = None
+
 class BroadcastPayload(BaseModel):
     message: str
 
@@ -600,44 +617,57 @@ def delete_tenant_document(doc_id: str, db: Session = Depends(get_tenant_db)):
     return {"status": "deleted"}
 
 @app.post("/api/tenant/documents/train")
-async def train_tenant_documents(db: Session = Depends(get_tenant_db)):
-    from decimal import Decimal
-    from backend.ai_service import parse_catalog_document_to_products, get_embedding
-    from backend.models import Product, Category, Tenant
-    
+async def train_tenant_documents(background_tasks: BackgroundTasks, db: Session = Depends(get_tenant_db)):
+    from backend.models import Tenant, KnowledgeDocument
     tenant = db.query(Tenant).first()
     if not tenant:
         raise HTTPException(status_code=404, detail="Tenant context not found")
 
     docs = db.query(KnowledgeDocument).all()
     for doc in docs:
-        doc.status = "TRAINED"
+        doc.status = "TRAINING"
     db.commit()
 
-    # Buscar documentos de tipo CATALOG o con título "menu"
-    catalog_docs = db.query(KnowledgeDocument).filter(KnowledgeDocument.type == "CATALOG").all()
-    if not catalog_docs:
-        catalog_docs = db.query(KnowledgeDocument).filter(KnowledgeDocument.title.ilike("%menu%")).all()
+    background_tasks.add_task(train_tenant_documents_task, str(tenant.id))
+    return {"status": "training_started"}
 
-    parsed_count = 0
-    if catalog_docs:
-        extracted_products = []
-        for doc in catalog_docs:
-            if doc.content:
-                parsed = await parse_catalog_document_to_products(doc.content, db)
-                extracted_products.extend(parsed)
+async def train_tenant_documents_task(tenant_id: str):
+    from backend.database import SessionLocal
+    from sqlalchemy import text
+    from decimal import Decimal
+    from backend.ai_service import parse_catalog_document_to_products, get_embedding
+    from backend.models import Product, Category, Tenant, KnowledgeDocument
+    
+    db = SessionLocal()
+    try:
+        db.execute(text("SET LOCAL app.current_tenant_id = :tenant_id"), {"tenant_id": tenant_id})
+        tenant = db.query(Tenant).first()
+        if not tenant:
+            return
+
+        catalog_docs = db.query(KnowledgeDocument).filter(KnowledgeDocument.type == "CATALOG").all()
+        if not catalog_docs:
+            catalog_docs = db.query(KnowledgeDocument).filter(KnowledgeDocument.title.ilike("%menu%")).all()
+
+        parsed_count = 0
+        if catalog_docs:
+            extracted_products = []
+            for doc in catalog_docs:
+                if doc.content:
+                    parsed = await parse_catalog_document_to_products(doc.content, db)
+                    extracted_products.extend(parsed)
         
-        if extracted_products:
-            active_product_names = []
-            for item in extracted_products:
-                name = item.get("name")
-                if not name:
-                    continue
-                active_product_names.append(name.lower())
-                
-                description = item.get("description", "")
-                price = item.get("price", 0.0)
-                stock = item.get("stock", 10)
+            if extracted_products:
+                active_product_names = []
+                for item in extracted_products:
+                    name = item.get("name")
+                    if not name:
+                        continue
+                    active_product_names.append(name.lower())
+                    
+                    description = item.get("description", "")
+                    price = item.get("price", 0.0)
+                    stock = item.get("stock", 10)
                 category_name = item.get("category", "General")
                 
                 # Obtener o crear categoría
@@ -693,7 +723,15 @@ async def train_tenant_documents(db: Session = Depends(get_tenant_db)):
                         p.is_active = False
                 db.commit()
 
-    return {"status": "trained", "count": len(docs), "products_extracted": parsed_count}
+        docs = db.query(KnowledgeDocument).all()
+        for doc in docs:
+            doc.status = "TRAINED"
+        db.commit()
+    except Exception as e:
+        print(f"Error en entrenamiento de documentos: {e}")
+        db.rollback()
+    finally:
+        db.close()
 
 
 @app.get("/api/tenant/products")
@@ -727,37 +765,153 @@ def delete_tenant_product(product_id: str, db: Session = Depends(get_tenant_db))
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid product ID")
 
+from backend.events import notify_new_order, serialize_order_for_frontend, order_subscribers
+import asyncio
+from fastapi.responses import StreamingResponse
 
+@app.get("/api/tenant/orders/stream")
+async def stream_tenant_orders():
+    queue = asyncio.Queue()
+    order_subscribers.add(queue)
+
+    async def event_generator():
+        try:
+            while True:
+                msg = await queue.get()
+                yield msg
+        except asyncio.CancelledError:
+            pass
+        finally:
+            order_subscribers.remove(queue)
+            
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+@app.get("/api/tenant/orders")
 def get_tenant_orders(db: Session = Depends(get_tenant_db)):
     orders = db.query(Order).order_by(Order.created_at.desc()).all()
     result = []
     for o in orders:
-        items = []
-        for item in o.items:
-            product_name = item.product.name if item.product else "Producto Desconocido"
-            items.append({
-                "name": product_name,
-                "quantity": item.quantity,
-                "price": float(item.price)
-            })
-        payment_method = o.payment.gateway if o.payment else "Efectivo"
-        
-        short_id = str(o.id).split("-")[-1][:4]
-        if "0000000000001" in str(o.id):
-            short_id = str(o.id).split("00000000")[-1]
-
-        result.append({
-            "id": short_id,
-            "uuid": str(o.id),
-            "customerName": o.customer.full_name if o.customer else "Cliente",
-            "phone": o.customer.phone_number if o.customer else "",
-            "paymentMethod": payment_method,
-            "total": float(o.total_amount),
-            "status": o.status,
-            "createdAt": o.created_at.isoformat(),
-            "items": items
-        })
+        short_id = str(o.id)[:8]
+        result.append(serialize_order_for_frontend(o, short_id))
     return result
+
+@app.post("/api/tenant/orders/simulate")
+async def simulate_order(req: SimulateOrderRequest, request: Request, db: Session = Depends(get_tenant_db)):
+    tenant_id = request.headers.get("X-Tenant-ID")
+    if not tenant_id:
+        raise HTTPException(status_code=400, detail="Missing X-Tenant-ID header")
+    
+    # Create fake customer if doesn't exist
+    customer = db.query(Customer).filter(Customer.phone_number == req.phone).first()
+    if not customer:
+        customer = Customer(
+            tenant_id=uuid.UUID(tenant_id),
+            phone_number=req.phone,
+            full_name=req.customerName
+        )
+        db.add(customer)
+        db.flush()
+
+    order = Order(
+        tenant_id=uuid.UUID(tenant_id),
+        customer_id=customer.id,
+        status="NEW",
+        total_amount=req.total,
+        delivery_method=req.deliveryMethod,
+        shipping_address=req.shippingAddress,
+        is_simulated=True
+    )
+    db.add(order)
+    db.flush()
+
+    # Add items
+    for item in req.items:
+        # Create fake product if not exists
+        product = db.query(Product).filter(Product.name == item["name"]).first()
+        if not product:
+            product = Product(
+                tenant_id=uuid.UUID(tenant_id),
+                name=item["name"],
+                description="Simulated product",
+                price=item["price"],
+                stock=100
+            )
+            db.add(product)
+            db.flush()
+
+        order_item = OrderItem(
+            order_id=order.id,
+            product_id=product.id,
+            quantity=item["quantity"],
+            price=item["price"]
+        )
+        db.add(order_item)
+
+    db.commit()
+    db.refresh(order)
+
+    # Trigger SSE
+    try:
+        loop = asyncio.get_running_loop()
+        loop.create_task(notify_new_order(order))
+    except RuntimeError:
+        pass
+
+    return {"status": "success", "order_id": str(order.id)}
+
+@app.delete("/api/tenant/orders/{order_id}")
+def delete_tenant_order(order_id: str, db: Session = Depends(get_tenant_db)):
+    order = None
+    try:
+        order_uuid = uuid.UUID(order_id)
+        order = db.query(Order).filter(Order.id == order_uuid).first()
+    except ValueError:
+        pass
+    if not order:
+        orders = db.query(Order).all()
+        for o in orders:
+            if str(o.id).endswith(order_id):
+                order = o
+                break
+    
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    db.delete(order)
+    db.commit()
+    return {"status": "success"}
+
+@app.put("/api/tenant/orders/{order_id}")
+def edit_tenant_order(order_id: str, data: UpdateOrderRequest, db: Session = Depends(get_tenant_db)):
+    order = None
+    try:
+        order_uuid = uuid.UUID(order_id)
+        order = db.query(Order).filter(Order.id == order_uuid).first()
+    except ValueError:
+        pass
+    if not order:
+        orders = db.query(Order).all()
+        for o in orders:
+            if str(o.id).endswith(order_id):
+                order = o
+                break
+    
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    if data.customerName and order.customer:
+        order.customer.full_name = data.customerName
+    if data.phone and order.customer:
+        order.customer.phone_number = data.phone
+    if data.total is not None:
+        order.total_amount = data.total
+    if data.deliveryMethod is not None:
+        order.delivery_method = data.deliveryMethod
+    if data.shippingAddress is not None:
+        order.shipping_address = data.shippingAddress
+
+    db.commit()
+    return {"status": "success"}
 
 @app.put("/api/tenant/orders/{order_id}/status")
 def update_tenant_order_status(order_id: str, data: OrderStatusUpdate, db: Session = Depends(get_tenant_db)):

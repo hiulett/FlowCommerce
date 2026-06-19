@@ -26,6 +26,7 @@ interface Order {
   deliveredAt?: Date;
   deliveryMethod?: 'DELIVERY' | 'PICKUP';
   shippingAddress?: string;
+  isSimulated?: boolean;
 }
 interface Customer {
   id: string; name: string; phone: string; email?: string;
@@ -1600,9 +1601,7 @@ function AIKnowledgeView({ showToast, searchQuery }: { showToast:(m:string,t?:To
       .catch(err => console.error("Error fetching products:", err));
   };
 
-  useEffect(() => {
-    fetchProducts();
-    // Fetch documents
+  const fetchDocs = () => {
     fetch(API_BASE_URL + '/api/tenant/documents', {
       headers: { 'X-Tenant-ID': '40446806-0107-6201-9310-c9943efb3870' }
     })
@@ -1620,6 +1619,24 @@ function AIKnowledgeView({ showToast, searchQuery }: { showToast:(m:string,t?:To
         setDocs(mapped);
       })
       .catch(err => console.error("Error fetching docs:", err));
+  };
+
+  const isTraining = docs.some(d => d.status === 'TRAINING');
+
+  useEffect(() => {
+    let interval: any;
+    if (isTraining) {
+      interval = setInterval(() => {
+        fetchDocs();
+        fetchProducts();
+      }, 3000);
+    }
+    return () => clearInterval(interval);
+  }, [isTraining]);
+
+  useEffect(() => {
+    fetchProducts();
+    fetchDocs();
 
     // Fetch prompt
     fetch(API_BASE_URL + '/api/tenant/settings', {
@@ -1730,9 +1747,8 @@ function AIKnowledgeView({ showToast, searchQuery }: { showToast:(m:string,t?:To
     })
       .then(res => res.json())
       .then(() => {
-        setDocs(prev => prev.map(d => ({ ...d, status: 'TRAINED' })));
-        fetchProducts();
-        showToast('Modelo entrenado y productos extraídos correctamente', 'success');
+        setDocs(prev => prev.map(d => ({ ...d, status: 'TRAINING' })));
+        showToast('Entrenamiento en progreso. Esto puede tomar unos minutos...', 'info');
         setModal(null);
       })
       .catch(err => console.error("Error training model:", err));
@@ -1764,8 +1780,10 @@ function AIKnowledgeView({ showToast, searchQuery }: { showToast:(m:string,t?:To
       <div className="page-header">
         <div className="page-header-title"><h2>AI Knowledge Base</h2><p><MI name="psychology"/>Base de conocimiento del asistente IA de WhatsApp</p></div>
         <div className="page-header-actions">
-          <button className="btn btn-primary" onClick={()=>{setSelected(null);setModal('upload');}}><MI name="upload_file"/>Cargar Documento</button>
-          <button className="btn btn-secondary" onClick={()=>setModal('train')}><MI name="auto_awesome"/>Entrenar Modelo</button>
+          <button className="btn btn-primary" onClick={()=>{setSelected(null);setModal('upload');}} disabled={isTraining}><MI name="upload_file"/>Cargar Documento</button>
+          <button className="btn btn-secondary" onClick={()=>setModal('train')} disabled={isTraining}>
+            {isTraining ? <><div className="spinner" style={{width: 16, height: 16, borderWidth: 2, marginRight: 8}}></div> Entrenando...</> : <><MI name="auto_awesome"/>Entrenar Modelo</>}
+          </button>
         </div>
       </div>
       <div className="grid grid-cols-4 gap-4" style={{marginBottom:24}}>
@@ -1784,7 +1802,9 @@ function AIKnowledgeView({ showToast, searchQuery }: { showToast:(m:string,t?:To
                   <div style={{fontWeight:700,fontSize:14,marginBottom:2}}>{doc.title}</div>
                   <div style={{display:'flex',alignItems:'center',gap:8}}><span className={`badge ${typeColors[doc.type]}`}>{KB_LABEL[doc.type]}</span><span style={{fontSize:11,color:'var(--color-on-surface-variant)'}}>{doc.wordCount.toLocaleString()} palabras</span></div>
                 </div>
-                <span className={`badge ${doc.status==='TRAINED'?'badge-active':'badge-preparing'}`}>{doc.status==='TRAINED'?'✓ Entrenado':'⏳ Pendiente'}</span>
+                <span className={`badge ${doc.status==='TRAINED'?'badge-active':doc.status==='TRAINING'?'badge-preparing':'badge-delivered'}`}>
+                  {doc.status==='TRAINED'?'✓ Entrenado':doc.status==='TRAINING'?'🔄 Entrenando...':'⏳ Pendiente'}
+                </span>
               </div>
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
                 <span style={{fontSize:11,color:'var(--color-outline)'}}><MI name="schedule" style={{fontSize:13,verticalAlign:'middle'}}/> {doc.lastUpdated}</span>
@@ -1866,14 +1886,16 @@ function AIKnowledgeView({ showToast, searchQuery }: { showToast:(m:string,t?:To
 }
 
 // ── Orders View ────────────────────────────────────────────────────────────────
-function OrdersView({ orders, delivered, onUpdateOrderStatus, simulatingOrders, setSimulatingOrders, showToast, searchQuery }: { orders:Order[]; delivered:Order[]; onUpdateOrderStatus:(id:string,status:OrderStatus)=>void; simulatingOrders:boolean; setSimulatingOrders:(v:boolean)=>void; showToast:(m:string,t?:ToastMsg['type'])=>void; searchQuery:string }) {
+function OrdersView({ orders, delivered, onUpdateOrderStatus, onDeleteOrder, onEditOrder, simulatingOrders, setSimulatingOrders, showToast, searchQuery }: { orders:Order[]; delivered:Order[]; onUpdateOrderStatus:(id:string,status:OrderStatus)=>void; onDeleteOrder:(id:string)=>void; onEditOrder:(id:string,updates:Partial<Order>)=>void; simulatingOrders:boolean; setSimulatingOrders:(v:boolean)=>void; showToast:(m:string,t?:ToastMsg['type'])=>void; searchQuery:string }) {
   const [view,setView]=useState<'kanban'|'table'|'history'>('kanban');
   const [filterStatus,setFilterStatus]=useState('ALL');
+  const [showSimulated,setShowSimulated]=useState(true);
   const [selectedOrder,setSelectedOrder]=useState<Order|null>(null);
   const getMin=(d:Date)=>Math.floor((Date.now()-d.getTime())/60000);
   const exportOrders=()=>{downloadCSV('pedidos_nexus.csv',[['ID','Cliente','Teléfono','Método','Dirección','Productos','Total','Pago','Estado','Fecha'],...orders.map(o=>[o.id,o.customerName,o.phone,o.deliveryMethod==='PICKUP'?'Retiro Local':'Domicilio',o.shippingAddress||'-',o.items.map(i=>`${i.quantity}x${i.name}`).join('; '),o.total.toFixed(2),o.paymentMethod,STATUS_LABEL[o.status],o.createdAt.toLocaleString('es-CO')])]);showToast('CSV exportado correctamente','success');};
 
   const filterBySearch = (o: Order) => {
+    if (!showSimulated && o.isSimulated) return false;
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
     return o.customerName.toLowerCase().includes(q) ||
@@ -1890,6 +1912,10 @@ function OrdersView({ orders, delivered, onUpdateOrderStatus, simulatingOrders, 
       <div className="page-header">
         <div className="page-header-title"><h2>Gestión de Pedidos</h2><p><MI name="chat"/>{orders.length} activos · {delivered.length} entregados hoy</p></div>
         <div className="page-header-actions">
+          <label className="toggle-switch" style={{display:'inline-flex',alignItems:'center',gap:8,cursor:'pointer',fontSize:13,marginRight:16,padding:'6px 12px',borderRadius:8,background:'var(--color-surface-container)',border:'1px solid var(--color-outline-variant)'}}>
+            <input type="checkbox" checked={showSimulated} onChange={e=>setShowSimulated(e.target.checked)} style={{cursor:'pointer'}}/>
+            <span style={{fontWeight:600}}><MI name="filter_alt"/> Mostrar Simulados</span>
+          </label>
           <label className="toggle-switch" style={{display:'inline-flex',alignItems:'center',gap:8,cursor:'pointer',fontSize:13,marginRight:16,padding:'6px 12px',borderRadius:8,background:'var(--color-surface-container)',border:'1px solid var(--color-outline-variant)'}}>
             <input type="checkbox" checked={simulatingOrders} onChange={e=>setSimulatingOrders(e.target.checked)} style={{cursor:'pointer'}}/>
             <span style={{fontWeight:600}}>{simulatingOrders ? '🟢 Simulador Activo' : '🔴 Simulador Pausado'}</span>
@@ -1926,11 +1952,14 @@ function OrdersView({ orders, delivered, onUpdateOrderStatus, simulatingOrders, 
                           <span className={`order-timer ${isRed?'timer-critical':isYellow?'timer-warning':'timer-normal'}`}><MI name="schedule"/>{elapsed} min</span>
                         </div>
                         
-                        <div style={{marginBottom:8}}>
+                        <div style={{marginBottom:8, display: 'flex', gap: 4, flexWrap: 'wrap'}}>
                           {isPickup ? (
                             <span className="badge" style={{background:'#f3e8ff',color:'#6b21a8',fontWeight:700,fontSize:10,padding:'2px 6px',borderRadius:4,display:'inline-flex',alignItems:'center',gap:4}}><MI name="store" style={{fontSize:12}}/>RETIRO LOCAL</span>
                           ) : (
                             <span className="badge" style={{background:'#dbeafe',color:'#1e3a8a',fontWeight:700,fontSize:10,padding:'2px 6px',borderRadius:4,display:'inline-flex',alignItems:'center',gap:4}}><MI name="local_shipping" style={{fontSize:12}}/>DOMICILIO</span>
+                          )}
+                          {order.isSimulated && (
+                            <span className="badge" style={{background:'#fef08a',color:'#854d0e',fontWeight:700,fontSize:10,padding:'2px 6px',borderRadius:4,display:'inline-flex',alignItems:'center',gap:4}}><MI name="science" style={{fontSize:12}}/>SIMULADO</span>
                           )}
                         </div>
 
@@ -1960,6 +1989,10 @@ function OrdersView({ orders, delivered, onUpdateOrderStatus, simulatingOrders, 
                           )
                         )}
                         {col==='SHIPPED'&&<button className="btn btn-success" style={{width:'100%',padding:'8px',fontSize:12,display:'flex',justifyContent:'center',alignItems:'center',gap:4}} onClick={()=>onUpdateOrderStatus(order.id,'DELIVERED')}><MI name="check_circle" style={{fontSize:16}}/>MARCAR ENTREGADO</button>}
+                        <div style={{display:'flex',gap:8,marginTop:8}}>
+                          <button className="btn btn-outline" style={{flex:1,padding:'4px 8px',fontSize:11,display:'flex',justifyContent:'center',alignItems:'center',gap:4,color:'var(--color-outline)'}} onClick={()=>{const n=prompt('Nuevo nombre (deje vacío para no cambiar):',order.customerName);if(n)onEditOrder(order.id,{customerName:n});}}><MI name="edit" style={{fontSize:14}}/>Editar</button>
+                          <button className="btn btn-outline" style={{flex:1,padding:'4px 8px',fontSize:11,display:'flex',justifyContent:'center',alignItems:'center',gap:4,color:'var(--color-error)'}} onClick={()=>{if(confirm('¿Eliminar este pedido?'))onDeleteOrder(order.id);}}><MI name="delete" style={{fontSize:14}}/>Borrar</button>
+                        </div>
                       </div>
                     );
                   })}
@@ -1981,7 +2014,10 @@ function OrdersView({ orders, delivered, onUpdateOrderStatus, simulatingOrders, 
               <thead><tr><th>ID</th><th>Cliente</th><th>Método</th><th>Dirección</th><th>Productos</th><th style={{textAlign:'right'}}>Total</th><th>Pago</th><th>Estado</th><th style={{textAlign:'right'}}>Acciones</th></tr></thead>
               <tbody>{filteredOrders.filter(o=>filterStatus==='ALL'||o.status===filterStatus).map(o=>(
                 <tr key={o.id} style={{cursor:'pointer'}} onClick={()=>setSelectedOrder(o)}>
-                  <td><span className="font-mono" style={{color:'var(--color-primary)',fontWeight:700}}>#{o.id}</span></td>
+                  <td>
+                    <span className="font-mono" style={{color:'var(--color-primary)',fontWeight:700}}>#{o.id}</span>
+                    {o.isSimulated && <span className="badge" style={{background:'#fef08a',color:'#854d0e',fontWeight:700,fontSize:9,padding:'2px 4px',borderRadius:4,marginLeft:4}}>SIMULADO</span>}
+                  </td>
                   <td><div style={{display:'flex',alignItems:'center',gap:10}}><div style={{width:34,height:34,borderRadius:'50%',background:'#e2dfff',color:'var(--color-primary)',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,fontSize:12,flexShrink:0}}>{getInitials(o.customerName)}</div><div style={{fontWeight:600}}>{o.customerName}</div></div></td>
                   <td><span style={{fontSize:12,fontWeight:600}}>{o.deliveryMethod === 'PICKUP' ? '🛍️ Retiro Local' : '🛵 Domicilio'}</span></td>
                   <td style={{fontSize:11,maxWidth:180,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{o.shippingAddress || '-'}</td>
@@ -2001,6 +2037,8 @@ function OrdersView({ orders, delivered, onUpdateOrderStatus, simulatingOrders, 
                       )
                     )}
                     {o.status==='SHIPPED'&&<button className="btn btn-success" style={{padding:'5px 12px',fontSize:11}} onClick={()=>onUpdateOrderStatus(o.id,'DELIVERED')}>Entregado</button>}
+                    <button className="btn btn-outline" style={{padding:'5px',fontSize:11}} title="Editar" onClick={()=>{const n=prompt('Nuevo nombre:',o.customerName);if(n)onEditOrder(o.id,{customerName:n});}}><MI name="edit" style={{fontSize:14}}/></button>
+                    <button className="btn btn-outline" style={{padding:'5px',fontSize:11,color:'var(--color-error)'}} title="Borrar" onClick={()=>{if(confirm('¿Eliminar pedido?'))onDeleteOrder(o.id);}}><MI name="delete" style={{fontSize:14}}/></button>
                   </div></td>
                 </tr>
               ))}</tbody>
@@ -3265,7 +3303,11 @@ export function SuperAdminAIKeysView({ showToast, searchQuery }: { showToast: (m
 // ROOT APP
 // ═══════════════════════════════════════════════════════════════════════════════
 export default function App({ user, onLogout }: { user:{name:string;email:string;role?:string}; onLogout:()=>void }) {
-  const [activeTab,setActiveTab]=useState<TabKey>('dashboard');
+  const [activeTab,setActiveTab]=useState<TabKey>(() => {
+    const hash = window.location.hash.replace('#', '');
+    if (hash) return hash as TabKey;
+    return 'dashboard';
+  });
   const [toasts,setToasts]=useState<ToastMsg[]>([]);
   const [showNotifs,setShowNotifs]=useState(false);
   const [showProfile,setShowProfile]=useState(false);
@@ -3275,6 +3317,19 @@ export default function App({ user, onLogout }: { user:{name:string;email:string
   const [modal,setModal]=useState<ModalKey>(null);
   const [delivered,setDelivered]=useState<Order[]>([]);
   const toastIdRef=useRef(0);
+
+  useEffect(() => {
+    window.location.hash = activeTab;
+  }, [activeTab]);
+
+  useEffect(() => {
+    const handleHashChange = () => {
+      const hash = window.location.hash.replace('#', '');
+      if (hash) setActiveTab(hash as TabKey);
+    };
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
 
   // Super Admin States
   const [tenants, setTenants] = useState<Tenant[]>([]);
@@ -3409,31 +3464,74 @@ export default function App({ user, onLogout }: { user:{name:string;email:string
   },[]);
   const dismissToast=useCallback((id:number)=>setToasts(p=>p.filter(t=>t.id!==id)),[]);
 
-  const [simulatingOrders, setSimulatingOrders] = useState<boolean>(true);
+  const [simulatingOrders, setSimulatingOrders] = useState<boolean>(() => {
+    return localStorage.getItem('simulatingOrders') !== 'false';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('simulatingOrders', String(simulatingOrders));
+  }, [simulatingOrders]);
+
   const [orders,setOrders]=useState<Order[]>([]);
 
   useEffect(() => {
     if (user.role === 'SUPER_ADMIN') return;
-    fetch(API_BASE_URL + '/api/tenant/orders', {
-      headers: { 'X-Tenant-ID': '40446806-0107-6201-9310-c9943efb3870' }
-    })
-      .then(res => res.json())
-      .then(data => {
-        const mapped = data.map((o: any) => ({
-          ...o,
-          createdAt: new Date(o.createdAt),
-          deliveryMethod: o.deliveryMethod || o.delivery_method || 'DELIVERY',
-          shippingAddress: o.shippingAddress || o.shipping_address
-        }));
-        setOrders(mapped.filter((o: any) => o.status !== 'DELIVERED'));
-        setDelivered(mapped.filter((o: any) => o.status === 'DELIVERED'));
+    
+    const fetchOrders = () => {
+      fetch(API_BASE_URL + '/api/tenant/orders', {
+        headers: { 'X-Tenant-ID': '40446806-0107-6201-9310-c9943efb3870' }
       })
-      .catch(err => console.error("Error fetching orders:", err));
-  }, [user.role]);
+        .then(res => res.json())
+        .then(data => {
+          if (Array.isArray(data)) {
+            const mapped = data.map((o: any) => ({
+              ...o,
+              createdAt: new Date(o.createdAt),
+              deliveryMethod: o.deliveryMethod || o.delivery_method || 'DELIVERY',
+              shippingAddress: o.shippingAddress || o.shipping_address
+            }));
+            setOrders(mapped.filter((o: any) => o.status !== 'DELIVERED'));
+            setDelivered(mapped.filter((o: any) => o.status === 'DELIVERED'));
+          }
+        })
+        .catch(err => console.error("Error fetching orders:", err));
+    };
+
+    // Initial fetch
+    fetchOrders();
+
+    // Listen to real-time events from the backend to instantly inject orders
+    const eventSource = new EventSource(API_BASE_URL + '/api/tenant/orders/stream');
+    eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        const newOrder = {
+          ...data,
+          createdAt: new Date(data.createdAt),
+          deliveryMethod: data.deliveryMethod || data.delivery_method || 'DELIVERY',
+          shippingAddress: data.shippingAddress || data.shipping_address
+        };
+        // Inject the order precisely like the simulator!
+        setOrders(prev => {
+          // Prevent duplicates if already fetched
+          if (prev.some(o => o.id === newOrder.id)) return prev;
+          return [newOrder, ...prev];
+        });
+        // Optionally show toast for new real order
+        showToast(`¡Nuevo pedido recibido! (#${newOrder.id})`, 'info');
+      } catch (err) {
+        console.error("Error parsing real-time order stream:", err);
+      }
+    };
+
+    return () => {
+      eventSource.close();
+    };
+  }, [user.role, showToast]);
 
   useEffect(()=>{
     if (user.role === 'SUPER_ADMIN' || !simulatingOrders) return;
-    const sim=setInterval(()=>{
+    const sim=setInterval(async ()=>{
       const names=['Patricia Rojas','Roberto Díaz','Ana Martínez','Felipe Torres'];
       const products=['Pizza Hawaiana','Combo Familiar','Alitas x6','Hamburguesa Clásica'];
       const methods=['WhatsApp Pay','Efectivo','QR'];
@@ -3441,22 +3539,30 @@ export default function App({ user, onLogout }: { user:{name:string;email:string
       const price=parseFloat((8+Math.random()*20).toFixed(2));
       const deliveryMethod = Math.random() > 0.5 ? 'DELIVERY' : 'PICKUP';
       const address = deliveryMethod === 'DELIVERY' ? 'Calle ' + Math.floor(10+Math.random()*90) + ' # ' + Math.floor(1+Math.random()*90) + '-' + Math.floor(1+Math.random()*90) : undefined;
-      const newOrder:Order={
-        id:Math.floor(1050+Math.random()*900).toString(),
+      const payload = {
         customerName:names[Math.floor(Math.random()*names.length)],
         phone:'57300'+Math.floor(1000000+Math.random()*9000000),
         paymentMethod:methods[Math.floor(Math.random()*methods.length)],
         items:[{name:product,quantity:1,price}],
         total:price,
-        createdAt:new Date(),
-        status:'NEW',
         deliveryMethod,
         shippingAddress:address
       };
-      setOrders(p=>[...p,newOrder]);
-      showToast(`Nuevo pedido #${newOrder.id} de ${newOrder.customerName} (${deliveryMethod === 'DELIVERY' ? 'Domicilio' : 'Retiro'})`,'info');
-      setNotifs(p=>[{id:`N${Date.now()}`,title:`Nuevo pedido #${newOrder.id}`,desc:`${newOrder.customerName} ordenó ${product} — $${price}`,time:'Ahora',type:'order',read:false},...p]);
-      try{const ctx=new(window.AudioContext||(window as any).webkitAudioContext)();const osc=ctx.createOscillator();const gain=ctx.createGain();osc.connect(gain);gain.connect(ctx.destination);osc.frequency.setValueAtTime(880,ctx.currentTime);gain.gain.setValueAtTime(0.08,ctx.currentTime);osc.start();osc.stop(ctx.currentTime+0.12);}catch{}
+      
+      try {
+        const token = localStorage.getItem('tenant_token');
+        await fetch(`${API_BASE_URL}/api/tenant/orders/simulate`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+          },
+          body: JSON.stringify(payload)
+        });
+        // The SSE will receive the update and update the UI automatically.
+      } catch(e) {
+        console.error("Error simulating order:", e);
+      }
     },45000);
     return ()=>clearInterval(sim);
   },[showToast, user.role, simulatingOrders]);
@@ -3485,6 +3591,52 @@ export default function App({ user, onLogout }: { user:{name:string;email:string
         }
       })
       .catch(err => console.error("Error updating order status:", err));
+  };
+
+  const handleDeleteOrder = async (id: string) => {
+    try {
+      const token = localStorage.getItem('tenant_token');
+      const res = await fetch(`${API_BASE_URL}/api/tenant/orders/${id}`, {
+        method: 'DELETE',
+        headers: {
+          'X-Tenant-ID': '40446806-0107-6201-9310-c9943efb3870',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        }
+      });
+      if (res.ok) {
+        setOrders(p => p.filter(o => o.id !== id));
+        showToast(`Pedido #${id} eliminado correctamente`, 'success');
+      } else {
+        showToast('Error al eliminar pedido', 'error');
+      }
+    } catch (err) {
+      console.error(err);
+      showToast('Error al eliminar pedido', 'error');
+    }
+  };
+
+  const handleEditOrder = async (id: string, updates: Partial<Order>) => {
+    try {
+      const token = localStorage.getItem('tenant_token');
+      const res = await fetch(`${API_BASE_URL}/api/tenant/orders/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Tenant-ID': '40446806-0107-6201-9310-c9943efb3870',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify(updates)
+      });
+      if (res.ok) {
+        setOrders(p => p.map(o => o.id === id ? { ...o, ...updates } : o));
+        showToast(`Pedido #${id} actualizado`, 'success');
+      } else {
+        showToast('Error al actualizar pedido', 'error');
+      }
+    } catch (err) {
+      console.error(err);
+      showToast('Error al actualizar pedido', 'error');
+    }
   };
 
   const unreadCount=notifs.filter(n=>!n.read).length;
@@ -3634,7 +3786,7 @@ export default function App({ user, onLogout }: { user:{name:string;email:string
               {activeTab==='dashboard'    &&<DashboardView orders={[...orders, ...delivered]} showToast={showToast} searchQuery={searchQuery}/>}
               {activeTab==='ai-knowledge' &&<AIKnowledgeView showToast={showToast} searchQuery={searchQuery}/>}
               {activeTab==='chats'        &&<ChatsView showToast={showToast} searchQuery={searchQuery}/>}
-              {activeTab==='orders'       &&<OrdersView orders={orders} delivered={delivered} onUpdateOrderStatus={handleUpdateOrderStatus} simulatingOrders={simulatingOrders} setSimulatingOrders={setSimulatingOrders} showToast={showToast} searchQuery={searchQuery}/>}
+              {activeTab==='orders'       &&<OrdersView orders={orders} delivered={delivered} onUpdateOrderStatus={handleUpdateOrderStatus} onDeleteOrder={handleDeleteOrder} onEditOrder={handleEditOrder} simulatingOrders={simulatingOrders} setSimulatingOrders={setSimulatingOrders} showToast={showToast} searchQuery={searchQuery}/>}
               {activeTab==='customers'    &&<CustomersView showToast={showToast} searchQuery={searchQuery}/>}
               {activeTab==='settings'     &&<SettingsView showToast={showToast}/>}
             </>

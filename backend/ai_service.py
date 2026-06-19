@@ -19,8 +19,10 @@ async def get_embedding(text: str) -> List[float]:
     Se usa el modelo 'models/gemini-embedding-001' y se trunca/completa a 1536 dimensiones.
     """
     try:
+        from fastapi.concurrency import run_in_threadpool
         # Se asume la inicialización del cliente de google-generativeai
-        result = genai.embed_content(
+        result = await run_in_threadpool(
+            genai.embed_content,
             model="models/gemini-embedding-001",
             content=text,
             task_type="retrieval_document",
@@ -119,7 +121,9 @@ async def parse_catalog_document_to_products(content: str, db=None) -> List[Dict
             f"Texto:\n{content}"
         )
         
-        response = client.chat.completions.create(
+        from fastapi.concurrency import run_in_threadpool
+        response = await run_in_threadpool(
+            client.chat.completions.create,
             model="deepseek-chat",
             messages=[
                 {"role": "system", "content": "You are a helpful data extraction assistant that outputs strictly valid JSON arrays."},

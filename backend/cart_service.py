@@ -1,6 +1,8 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
 from backend.models import Order, OrderItem, Product, Customer
+import asyncio
+from backend.events import notify_new_order
 import uuid
 from decimal import Decimal
 from typing import Dict, Any, Tuple
@@ -168,12 +170,17 @@ def checkout_cart(db: Session, tenant_id: uuid.UUID, customer_id: uuid.UUID, del
             return f"Lo siento, la compra falló porque '{product.name}' ya no cuenta con suficiente stock (Disponibles: {product.stock}). Modifica tu carrito."
         product.stock -= item.quantity
 
-    # Actualizar método de entrega, dirección y estado a NEW
     order.delivery_method = delivery_method
     if shipping_address:
         order.shipping_address = shipping_address
     order.status = "NEW"
     db.commit()
+
+    try:
+        loop = asyncio.get_running_loop()
+        loop.create_task(notify_new_order(order))
+    except RuntimeError:
+        pass
 
     return f"¡Pedido Confirmado! Tu orden #{str(order.id)[:8]} ha sido registrada por un valor total de ${order.total_amount}. Para completar el pago, por favor ingresa al siguiente enlace seguro de Stripe o utiliza transferencia local: [Link de pago de prueba]."
 

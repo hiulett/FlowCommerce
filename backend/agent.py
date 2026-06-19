@@ -1,3 +1,4 @@
+from fastapi.concurrency import run_in_threadpool
 import google.generativeai as genai
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
@@ -149,18 +150,19 @@ async def run_conversational_agent(
         f"REGLAS OBLIGATORIAS:\n"
         f"- Basa tus respuestas EXCLUSIVAMENTE en el CONTEXTO DE NEGOCIO y la INFORMACIÓN ADICIONAL provista arriba.\n"
         f"- Si el cliente te pide comprar o agregar productos, debes invocar la herramienta correspondiente (Function Calling).\n"
-        f"- PROHIBIDO: Nunca escribas llamadas a funciones como texto en tu mensaje visible para el usuario (evita '/function=...', '<function...>', etc.). Utiliza únicamente el sistema nativo de llamadas a herramientas (Tool Calls/Function Calling).\n"
+        f"- Si el sistema nativo de tools falla, puedes escribir en tu mensaje: <function(nombre_funcion)>{{\"arg1\":\"val\"}}</function>\n"
         f"- Nunca inventes precios o stock. Si un producto no tiene stock, infórmalo educadamente.\n"
         f"- ANTES DE FINALIZAR O CONFIRMAR LA ORDEN (es decir, antes de llamar a 'confirm_and_checkout_order'), DEBES PREGUNTAR obligatoriamente al cliente lo siguiente:\n"
         f"  1. ¿Desea entrega a domicilio ('DELIVERY') o retirar en el local ('PICKUP')?\n"
         f"  2. Si el cliente elige a domicilio ('DELIVERY'), debes pedirle de forma obligatoria su dirección completa de entrega y/o su ubicación de WhatsApp.\n"
         f"  3. Si elige retirar en el local ('PICKUP'), no requiere pedir dirección de envío.\n"
         f"- NUNCA invoques 'confirm_and_checkout_order' usando direcciones genéricas o placeholders como 'dirección que proporcionarás' o 'dirección del cliente'. Si no tienes la dirección real y detallada provista por el cliente para un Domicilio, pídesela primero.\n"
+        f"- REGLA DE ORO PARA CONFIRMAR: Si el cliente aprueba, acepta o dice 'confirmar', 'procede', 'sí', DEBES LLAMAR INMEDIATAMENTE a la herramienta 'confirm_and_checkout_order'. NO respondas con mensajes como 'voy a confirmarlo' o 'dame un momento' sin invocar la herramienta al mismo tiempo.\n"
         f"- NUNCA le digas al cliente que su pedido está confirmado o listo para entrega si no has ejecutado exitosamente la herramienta 'confirm_and_checkout_order' primero. Solo confirma el pedido si la herramienta te devuelve que la orden fue confirmada con éxito.\n"
+        f"- Cuando confirmes el pedido exitosamente usando la herramienta, OBLIGATORIAMENTE DEBES mostrarle al cliente el Número de Pedido / ID de pedido real que te devuelve la herramienta.\n"
         f"- NUNCA inventes o asumas el contenido del carrito. Si vas a confirmar un pedido o si una operación falla, usa 'get_order_summary' para ver exactamente qué productos están en el carrito actualmente.\n"
         f"- Si la herramienta 'confirm_and_checkout_order' te devuelve un mensaje indicando que la compra falló o que hay un error (por ejemplo, por falta de stock de algún producto), debes informar al cliente de dicho error específico. NUNCA le digas que su pedido fue confirmado o que está listo para retirar/despachar si la herramienta falló."
     )
-
 
 
     # 4. Enrutamiento y Balanceo de Carga de IA
@@ -292,7 +294,7 @@ async def run_conversational_agent(
                     messages.append({"role": role, "content": msg.content})
                 messages.append({"role": "user", "content": user_message})
 
-                response = client.chat.completions.create(
+                response = await run_in_threadpool(client.chat.completions.create, 
                     model=model_name,
                     messages=messages,
                     tools=openai_tools,
@@ -308,7 +310,7 @@ async def run_conversational_agent(
                     print(f"[IA] Ejecutando llamada de texto en OpenAI para '{func_name}'...")
                     messages.append({"role": "assistant", "content": text_content})
                     messages.append({"role": "user", "content": f"Resultado de {func_name}: {text_tool_result}"})
-                    final_response = client.chat.completions.create(
+                    final_response = await run_in_threadpool(client.chat.completions.create, 
                         model=model_name,
                         messages=messages
                     )
@@ -365,7 +367,7 @@ async def run_conversational_agent(
                     })
 
                     print(f"[IA] Enviando resultado de herramienta a OpenAI para obtener respuesta conversacional final...")
-                    final_response = client.chat.completions.create(
+                    final_response = await run_in_threadpool(client.chat.completions.create, 
                         model=model_name,
                         messages=messages
                     )
@@ -395,7 +397,7 @@ async def run_conversational_agent(
                     messages.append({"role": role, "content": msg.content})
                 messages.append({"role": "user", "content": user_message})
 
-                response = client.chat.completions.create(
+                response = await run_in_threadpool(client.chat.completions.create, 
                     model=model_name,
                     messages=messages,
                     tools=openai_tools,
@@ -411,7 +413,7 @@ async def run_conversational_agent(
                     print(f"[IA] Ejecutando llamada de texto en DeepSeek para '{func_name}'...")
                     messages.append({"role": "assistant", "content": text_content})
                     messages.append({"role": "user", "content": f"Resultado de {func_name}: {text_tool_result}"})
-                    final_response = client.chat.completions.create(
+                    final_response = await run_in_threadpool(client.chat.completions.create, 
                         model=model_name,
                         messages=messages
                     )
@@ -468,7 +470,7 @@ async def run_conversational_agent(
                     })
 
                     print(f"[IA] Enviando resultado de herramienta a DeepSeek para obtener respuesta conversacional final...")
-                    final_response = client.chat.completions.create(
+                    final_response = await run_in_threadpool(client.chat.completions.create, 
                         model=model_name,
                         messages=messages
                     )
@@ -499,7 +501,7 @@ async def run_conversational_agent(
                     messages.append({"role": role, "content": msg.content})
                 messages.append({"role": "user", "content": user_message})
 
-                response = client.chat.completions.create(
+                response = await run_in_threadpool(client.chat.completions.create, 
                     model=model_name,
                     messages=messages,
                     tools=openai_tools,
@@ -516,7 +518,7 @@ async def run_conversational_agent(
                     print(f"[IA] Ejecutando llamada de texto en Groq para '{func_name}'...")
                     messages.append({"role": "assistant", "content": text_content})
                     messages.append({"role": "user", "content": f"Resultado de {func_name}: {text_tool_result}"})
-                    final_response = client.chat.completions.create(
+                    final_response = await run_in_threadpool(client.chat.completions.create, 
                         model=model_name,
                         messages=messages
                     )
@@ -573,7 +575,7 @@ async def run_conversational_agent(
                     })
 
                     print(f"[IA] Enviando resultado de herramienta a Groq para obtener respuesta conversacional final...")
-                    final_response = client.chat.completions.create(
+                    final_response = await run_in_threadpool(client.chat.completions.create, 
                         model=model_name,
                         messages=messages
                     )
@@ -608,7 +610,7 @@ async def run_conversational_agent(
                     "X-Title": "FlowCommerce"
                 }
 
-                response = client.chat.completions.create(
+                response = await run_in_threadpool(client.chat.completions.create, 
                     model=model_name,
                     messages=messages,
                     tools=openai_tools,
@@ -625,7 +627,7 @@ async def run_conversational_agent(
                     print(f"[IA] Ejecutando llamada de texto en OpenRouter para '{func_name}'...")
                     messages.append({"role": "assistant", "content": text_content})
                     messages.append({"role": "user", "content": f"Resultado de {func_name}: {text_tool_result}"})
-                    final_response = client.chat.completions.create(
+                    final_response = await run_in_threadpool(client.chat.completions.create, 
                         model=model_name,
                         messages=messages,
                         extra_headers=extra_headers
@@ -683,7 +685,7 @@ async def run_conversational_agent(
                     })
 
                     print(f"[IA] Enviando resultado de herramienta a OpenRouter para obtener respuesta conversacional final...")
-                    final_response = client.chat.completions.create(
+                    final_response = await run_in_threadpool(client.chat.completions.create, 
                         model=model_name,
                         messages=messages,
                         extra_headers=extra_headers
@@ -699,13 +701,12 @@ async def run_conversational_agent(
                     balancer.update_last_used(db, key_id)
                 return response_message.content
 
-            elif provider == "ollama":
+            elif provider == "deepseek":
                 from openai import OpenAI
-                import json
 
                 client = OpenAI(
-                    base_url=settings.OLLAMA_BASE_URL,
-                    api_key="ollama"
+                    base_url="https://api.deepseek.com",
+                    api_key=api_key
                 )
                 
                 messages = [{"role": "system", "content": system_prompt}]
@@ -714,8 +715,8 @@ async def run_conversational_agent(
                     messages.append({"role": role, "content": msg.content})
                 messages.append({"role": "user", "content": user_message})
 
-                response = client.chat.completions.create(
-                    model=model_name,
+                response = await run_in_threadpool(client.chat.completions.create, 
+                    model=model_name or "deepseek-chat",
                     messages=messages,
                     tools=openai_tools,
                     tool_choice="auto"
@@ -727,15 +728,23 @@ async def run_conversational_agent(
                 text_content = response_message.content or ""
                 func_name, text_tool_result = parse_and_execute_text_function(text_content, db, tenant.id, customer_id)
                 if func_name:
-                    print(f"[IA] Ejecutando llamada de texto en Ollama para '{func_name}'...")
+                    if func_name == "confirm_and_checkout_order" and "¡Pedido Confirmado!" in text_tool_result:
+                        new_ord = db.query(Order).filter(
+                            Order.tenant_id == tenant.id,
+                            Order.customer_id == customer_id,
+                            Order.status == "NEW"
+                        ).order_by(Order.created_at.desc()).first()
+                        if new_ord:
+                            await notify_new_order(new_ord)
+                    print(f"[IA] Ejecutando llamada de texto en DeepSeek para '{func_name}'...")
                     messages.append({"role": "assistant", "content": text_content})
                     messages.append({"role": "user", "content": f"Resultado de {func_name}: {text_tool_result}"})
-                    final_response = client.chat.completions.create(
-                        model=model_name,
+                    final_response = await run_in_threadpool(client.chat.completions.create, 
+                        model=model_name or "deepseek-chat",
                         messages=messages
                     )
                     final_text = final_response.choices[0].message.content
-                    print(f"[IA] Respuesta final post-herramienta (Ollama-Texto) generada: '{final_text}'")
+                    print(f"[IA] Respuesta final post-herramienta (DeepSeek-Texto) generada: '{final_text}'")
                     if key_id:
                         balancer.update_last_used(db, key_id)
                     return final_text
@@ -744,7 +753,7 @@ async def run_conversational_agent(
                     tool_call = tool_calls[0]
                     function_name = tool_call.function.name
                     args = json.loads(tool_call.function.arguments)
-                    print(f"[IA] Function Calling (Ollama): El modelo solicitó ejecutar herramienta '{function_name}' con argumentos: {args}")
+                    print(f"[IA] Function Calling (DeepSeek): El modelo solicitó ejecutar herramienta '{function_name}' con argumentos: {args}")
                     
                     tool_result = ""
                     if function_name == "add_product_to_order":
@@ -759,10 +768,18 @@ async def run_conversational_agent(
                             delivery_method=args.get("delivery_method", "DELIVERY"),
                             shipping_address=args.get("shipping_address")
                         )
+                        if "¡Pedido Confirmado!" in tool_result:
+                            new_ord = db.query(Order).filter(
+                                Order.tenant_id == tenant.id,
+                                Order.customer_id == customer_id,
+                                Order.status == "NEW"
+                            ).order_by(Order.created_at.desc()).first()
+                            if new_ord:
+                                await notify_new_order(new_ord)
                     else:
                         tool_result = "Función no implementada."
 
-                    print(f"[IA] Tool Result (Ollama): Resultado de ejecutar la herramienta '{function_name}': '{tool_result}'")
+                    print(f"[IA] Tool Result (DeepSeek): Resultado de ejecutar la herramienta '{function_name}': '{tool_result}'")
 
                     ass_msg = {
                         "role": "assistant",
@@ -786,18 +803,18 @@ async def run_conversational_agent(
                         "content": tool_result
                     })
 
-                    print(f"[IA] Enviando resultado de herramienta a Ollama para obtener respuesta conversacional final...")
-                    final_response = client.chat.completions.create(
-                        model=model_name,
+                    print(f"[IA] Enviando resultado de herramienta a DeepSeek para obtener respuesta conversacional final...")
+                    final_response = await run_in_threadpool(client.chat.completions.create, 
+                        model=model_name or "deepseek-chat",
                         messages=messages
                     )
                     final_text = final_response.choices[0].message.content
-                    print(f"[IA] Respuesta final post-herramienta (Ollama) generada: '{final_text}'")
+                    print(f"[IA] Respuesta final post-herramienta (DeepSeek) generada: '{final_text}'")
                     if key_id:
                         balancer.update_last_used(db, key_id)
                     return final_text
 
-                print(f"[IA] Respuesta directa (Ollama) generada: '{response_message.content}'")
+                print(f"[IA] Respuesta directa (DeepSeek) generada: '{response_message.content}'")
                 if key_id:
                     balancer.update_last_used(db, key_id)
                 return response_message.content
@@ -837,6 +854,14 @@ async def run_conversational_agent(
                 text_content = response.text or ""
                 func_name, text_tool_result = parse_and_execute_text_function(text_content, db, tenant.id, customer_id)
                 if func_name:
+                    if func_name == "confirm_and_checkout_order" and "¡Pedido Confirmado!" in text_tool_result:
+                        new_ord = db.query(Order).filter(
+                            Order.tenant_id == tenant.id,
+                            Order.customer_id == customer_id,
+                            Order.status == "NEW"
+                        ).order_by(Order.created_at.desc()).first()
+                        if new_ord:
+                            await notify_new_order(new_ord)
                     print(f"[IA] Ejecutando llamada de texto en Gemini para '{func_name}'...")
                     contents.append({"role": "model", "parts": [text_content]})
                     contents.append({"role": "user", "parts": [f"Resultado de {func_name}: {text_tool_result}"]})
@@ -870,6 +895,14 @@ async def run_conversational_agent(
                                 delivery_method=args.get("delivery_method", "DELIVERY"),
                                 shipping_address=args.get("shipping_address")
                             )
+                            if "¡Pedido Confirmado!" in tool_result:
+                                new_ord = db.query(Order).filter(
+                                    Order.tenant_id == tenant.id,
+                                    Order.customer_id == customer_id,
+                                    Order.status == "NEW"
+                                ).order_by(Order.created_at.desc()).first()
+                                if new_ord:
+                                    await notify_new_order(new_ord)
                         else:
                             tool_result = "Función no implementada."
 
