@@ -922,7 +922,7 @@ def update_tenant_order_status(order_id: str, data: OrderStatusUpdate, db: Sessi
     except ValueError:
         orders = db.query(Order).all()
         for o in orders:
-            if str(o.id).endswith(order_id):
+            if str(o.id).startswith(order_id):
                 order = o
                 break
     
@@ -943,7 +943,7 @@ async def send_order_invoice(order_id: str, db: Session = Depends(get_tenant_db)
     except ValueError:
         orders = db.query(Order).all()
         for o in orders:
-            if str(o.id).endswith(order_id):
+            if str(o.id).startswith(order_id):
                 order = o
                 break
     

@@ -42,6 +42,9 @@ def get_tenant_db(request: Request) -> Generator:
             # Establece la variable de sesión en PostgreSQL para RLS
             db.execute(text("SET LOCAL app.current_tenant_id = :tenant_id"), {"tenant_id": tenant_id})
         yield db
+    except HTTPException:
+        db.rollback()
+        raise
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error en la sesión de base de datos: {str(e)}")
