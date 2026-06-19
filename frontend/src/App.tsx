@@ -3147,6 +3147,9 @@ export interface AIKey {
   cool_down_until: string | null;
   last_used: string | null;
   created_at: string;
+  tasks?: string | null;
+  spending_limit?: number | null;
+  current_spend?: number;
 }
 
 export function SuperAdminAIKeysView({ showToast, searchQuery }: { showToast: (m: string, t?: any) => void; searchQuery: string }) {
@@ -3160,6 +3163,8 @@ export function SuperAdminAIKeysView({ showToast, searchQuery }: { showToast: (m
   const [modelName, setModelName] = useState('gemini-2.0-flash');
   const [apiKey, setApiKey] = useState('');
   const [supportsTools, setSupportsTools] = useState(true);
+  const [tasks, setTasks] = useState('');
+  const [spendingLimit, setSpendingLimit] = useState('');
 
   const fetchKeys = useCallback(() => {
     setLoading(true);
@@ -3221,7 +3226,9 @@ export function SuperAdminAIKeysView({ showToast, searchQuery }: { showToast: (m
         name,
         api_key: apiKey,
         model_name: modelName,
-        supports_tools: supportsTools
+        supports_tools: supportsTools,
+        tasks: tasks || null,
+        spending_limit: spendingLimit ? parseFloat(spendingLimit) : null
       })
     })
       .then(res => res.json())
@@ -3232,6 +3239,8 @@ export function SuperAdminAIKeysView({ showToast, searchQuery }: { showToast: (m
         setName('');
         setApiKey('');
         setSupportsTools(true);
+        setTasks('');
+        setSpendingLimit('');
         fetchKeys();
       })
       .catch(err => console.error("Error adding AI key:", err));
@@ -3283,6 +3292,8 @@ export function SuperAdminAIKeysView({ showToast, searchQuery }: { showToast: (m
                 <th>Nombre Conexión</th>
                 <th>Modelo</th>
                 <th style={{ textAlign: 'center' }}>Soporta Tools</th>
+                <th>Tareas</th>
+                <th>Presupuesto</th>
                 <th>Métricas / Salud</th>
                 <th>Último Uso</th>
                 <th>Estado</th>
@@ -3301,6 +3312,12 @@ export function SuperAdminAIKeysView({ showToast, searchQuery }: { showToast: (m
                     <span className="material-symbols-outlined" style={{ color: k.supports_tools ? 'var(--color-success-emerald)' : 'var(--color-outline)' }}>
                       {k.supports_tools ? 'check_circle' : 'cancel'}
                     </span>
+                  </td>
+                  <td style={{ fontSize: 12 }}>
+                    {k.tasks || 'Todas'}
+                  </td>
+                  <td style={{ fontSize: 12 }}>
+                    ${(k.current_spend || 0).toFixed(4)} {k.spending_limit ? `/ $${k.spending_limit}` : ''}
                   </td>
                   <td style={{ fontSize: 12 }}>
                     <div>Fallos: {k.failed_attempts}</div>
@@ -3374,6 +3391,15 @@ export function SuperAdminAIKeysView({ showToast, searchQuery }: { showToast: (m
               </div>
 
               <div className="form-group">
+                <label className="form-label">Tareas (Opcional, separadas por coma)</label>
+                <input className="form-input" placeholder="Ej: conver, tools" value={tasks} onChange={e => setTasks(e.target.value)}/>
+                <span className="form-hint">Si se deja en blanco, la llave servirá para todas las tareas.</span>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Límite de Gasto $ (Opcional)</label>
+                <input type="number" step="0.01" className="form-input" placeholder="Ej: 5.00" value={spendingLimit} onChange={e => setSpendingLimit(e.target.value)}/>
+              </div>
+              <div className="form-group">
                 <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
                   <input type="checkbox" checked={supportsTools} onChange={e => setSupportsTools(e.target.checked)}/>
                   <span>Soporta Function Calling (Herramientas del Carrito/RAG)</span>
@@ -3387,6 +3413,85 @@ export function SuperAdminAIKeysView({ showToast, searchQuery }: { showToast: (m
           </form>
         </Modal>
       )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+export function SuperAdminAIUsageView({ showToast }: { showToast: (m: string, t?: any) => void }) {
+  const [usage, setUsage] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    setLoading(true);
+    fetch(API_BASE_URL + '/api/super/ai-usage')
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data)) setUsage(data);
+        else console.error(data);
+        setLoading(false);
+      })
+      .catch(err => {
+        console.error("Error fetching AI usage:", err);
+        setLoading(false);
+      });
+  }, []);
+
+  const totalCost = usage.reduce((acc, curr) => acc + curr.total_cost, 0);
+
+  return (
+    <div>
+      <div className="page-header">
+        <div className="page-header-title">
+          <h2>Uso de IA y Facturación</h2>
+          <p><MI name="monitoring"/>Monitoreo de consumo de tokens y costos por Tenant</p>
+        </div>
+      </div>
+
+      <div className="stats-grid mb-6">
+        <div className="stat-card">
+          <div className="stat-icon" style={{background: 'var(--color-primary-light)', color: 'var(--color-primary)'}}>
+            <MI name="payments"/>
+          </div>
+          <div className="stat-content">
+            <div className="stat-value">${totalCost.toFixed(4)}</div>
+            <div className="stat-label">Costo Total IA</div>
+          </div>
+        </div>
+      </div>
+
+      <div className="data-table-wrapper">
+        {loading ? (
+          <div style={{ padding: 40, textAlign: 'center', color: 'var(--color-outline)' }}>Cargando consumo...</div>
+        ) : usage.length === 0 ? (
+          <div style={{ padding: 40, textAlign: 'center', color: 'var(--color-outline)' }}>No hay datos de consumo registrados.</div>
+        ) : (
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>ID Tenant</th>
+                <th>Nombre Tenant</th>
+                <th style={{ textAlign: 'right' }}>Tokens Input</th>
+                <th style={{ textAlign: 'right' }}>Tokens Output</th>
+                <th style={{ textAlign: 'right' }}>Costo Total Estimado ($)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {usage.map((u, i) => (
+                <tr key={i}>
+                  <td className="font-mono" style={{ fontSize: 12 }}>{u.tenant_id}</td>
+                  <td style={{ fontWeight: 600 }}>{u.tenant_name}</td>
+                  <td style={{ textAlign: 'right' }}>{u.input_tokens.toLocaleString()}</td>
+                  <td style={{ textAlign: 'right' }}>{u.output_tokens.toLocaleString()}</td>
+                  <td style={{ textAlign: 'right', fontWeight: 600, color: 'var(--color-primary)' }}>
+                    ${u.total_cost.toFixed(4)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
     </div>
   );
 }
@@ -3851,6 +3956,7 @@ export default function App({ user, onLogout }: { user:{name:string;email:string
               {activeTab==='dashboard'     &&<SuperAdminDashboardView tenants={tenants} logs={financialLogs}/>}
               {activeTab==='super-tenants' &&<SuperAdminTenantsView tenants={tenants} plans={platformPlans} onUpdateTenant={handleUpdateTenant} showToast={showToast} searchQuery={searchQuery}/>}
               {activeTab==='super-ai-keys' &&<SuperAdminAIKeysView showToast={showToast} searchQuery={searchQuery}/>}
+              {activeTab==='super-ai-usage' &&<SuperAdminAIUsageView showToast={showToast}/>}
               {activeTab==='super-plans'   &&<SuperAdminPlansView plans={platformPlans} onUpdatePlan={handleUpdatePlan} showToast={showToast}/>}
               {activeTab==='super-billing' &&<SuperAdminBillingView logs={financialLogs} onUpdateLog={handleUpdateLog} showToast={showToast} searchQuery={searchQuery}/>}
               {activeTab==='settings'      &&<div className="card"><div className="nexus-indicator"/><div className="card-body">

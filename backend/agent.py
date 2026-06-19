@@ -16,6 +16,32 @@ from backend.cart_service import (
 import uuid
 import re
 
+
+async def _tracked_completion(db, tenant_id, key_id, provider, model_name, client_func, *args, **kwargs):
+    from fastapi.concurrency import run_in_threadpool
+    from backend.ai_balancer import record_ai_usage
+    response = await run_in_threadpool(client_func, *args, **kwargs)
+    try:
+        if hasattr(response, "usage") and response.usage:
+            record_ai_usage(db, tenant_id, key_id, provider, model_name, 
+                            getattr(response.usage, "prompt_tokens", 0), 
+                            getattr(response.usage, "completion_tokens", 0))
+    except Exception as e:
+        print(f"Error recording usage: {e}")
+    return response
+
+async def _tracked_gemini(db, tenant_id, key_id, provider, model_name, model, contents):
+    from backend.ai_balancer import record_ai_usage
+    response = await _tracked_gemini(db, tenant.id, key_id, provider, gemini_model_name, model, contents)
+    try:
+        if hasattr(response, "usage_metadata") and response.usage_metadata:
+            record_ai_usage(db, tenant_id, key_id, provider, model_name, 
+                            getattr(response.usage_metadata, "prompt_token_count", 0), 
+                            getattr(response.usage_metadata, "candidates_token_count", 0))
+    except Exception as e:
+        print(f"Error recording usage: {e}")
+    return response
+
 def clean_ai_response(text: str) -> str:
     """Elimina etiquetas internas como las de DeepSeek <｜｜DSML｜｜tool_calls>"""
     if not text:
@@ -296,7 +322,7 @@ async def run_conversational_agent(
                     messages.append({"role": role, "content": msg.content})
                 messages.append({"role": "user", "content": user_message})
 
-                response = await run_in_threadpool(client.chat.completions.create, 
+                response = await _tracked_completion(db, tenant.id, key_id, provider, model_name, client.chat.completions.create, 
                     model=model_name,
                     messages=messages,
                     tools=openai_tools,
@@ -312,7 +338,7 @@ async def run_conversational_agent(
                     print(f"[IA] Ejecutando llamada de texto en OpenAI para '{func_name}'...")
                     messages.append({"role": "assistant", "content": text_content})
                     messages.append({"role": "user", "content": f"Resultado de {func_name}: {text_tool_result}"})
-                    final_response = await run_in_threadpool(client.chat.completions.create, 
+                    final_response = await _tracked_completion(db, tenant.id, key_id, provider, model_name, client.chat.completions.create, 
                         model=model_name,
                         messages=messages
                     )
@@ -373,7 +399,7 @@ async def run_conversational_agent(
                     })
 
                     print(f"[IA] Enviando resultado de herramienta a OpenAI para obtener respuesta conversacional final...")
-                    final_response = await run_in_threadpool(client.chat.completions.create, 
+                    final_response = await _tracked_completion(db, tenant.id, key_id, provider, model_name, client.chat.completions.create, 
                         model=model_name,
                         messages=messages
                     )
@@ -407,7 +433,7 @@ async def run_conversational_agent(
                     messages.append({"role": role, "content": msg.content})
                 messages.append({"role": "user", "content": user_message})
 
-                response = await run_in_threadpool(client.chat.completions.create, 
+                response = await _tracked_completion(db, tenant.id, key_id, provider, model_name, client.chat.completions.create, 
                     model=model_name,
                     messages=messages,
                     tools=openai_tools,
@@ -423,7 +449,7 @@ async def run_conversational_agent(
                     print(f"[IA] Ejecutando llamada de texto en DeepSeek para '{func_name}'...")
                     messages.append({"role": "assistant", "content": text_content})
                     messages.append({"role": "user", "content": f"Resultado de {func_name}: {text_tool_result}"})
-                    final_response = await run_in_threadpool(client.chat.completions.create, 
+                    final_response = await _tracked_completion(db, tenant.id, key_id, provider, model_name, client.chat.completions.create, 
                         model=model_name,
                         messages=messages
                     )
@@ -484,7 +510,7 @@ async def run_conversational_agent(
                     })
 
                     print(f"[IA] Enviando resultado de herramienta a DeepSeek para obtener respuesta conversacional final...")
-                    final_response = await run_in_threadpool(client.chat.completions.create, 
+                    final_response = await _tracked_completion(db, tenant.id, key_id, provider, model_name, client.chat.completions.create, 
                         model=model_name,
                         messages=messages
                     )
@@ -519,7 +545,7 @@ async def run_conversational_agent(
                     messages.append({"role": role, "content": msg.content})
                 messages.append({"role": "user", "content": user_message})
 
-                response = await run_in_threadpool(client.chat.completions.create, 
+                response = await _tracked_completion(db, tenant.id, key_id, provider, model_name, client.chat.completions.create, 
                     model=model_name,
                     messages=messages,
                     tools=openai_tools,
@@ -536,7 +562,7 @@ async def run_conversational_agent(
                     print(f"[IA] Ejecutando llamada de texto en Groq para '{func_name}'...")
                     messages.append({"role": "assistant", "content": text_content})
                     messages.append({"role": "user", "content": f"Resultado de {func_name}: {text_tool_result}"})
-                    final_response = await run_in_threadpool(client.chat.completions.create, 
+                    final_response = await _tracked_completion(db, tenant.id, key_id, provider, model_name, client.chat.completions.create, 
                         model=model_name,
                         messages=messages
                     )
@@ -597,7 +623,7 @@ async def run_conversational_agent(
                     })
 
                     print(f"[IA] Enviando resultado de herramienta a Groq para obtener respuesta conversacional final...")
-                    final_response = await run_in_threadpool(client.chat.completions.create, 
+                    final_response = await _tracked_completion(db, tenant.id, key_id, provider, model_name, client.chat.completions.create, 
                         model=model_name,
                         messages=messages
                     )
@@ -636,7 +662,7 @@ async def run_conversational_agent(
                     "X-Title": "FlowCommerce"
                 }
 
-                response = await run_in_threadpool(client.chat.completions.create, 
+                response = await _tracked_completion(db, tenant.id, key_id, provider, model_name, client.chat.completions.create, 
                     model=model_name,
                     messages=messages,
                     tools=openai_tools,
@@ -653,7 +679,7 @@ async def run_conversational_agent(
                     print(f"[IA] Ejecutando llamada de texto en OpenRouter para '{func_name}'...")
                     messages.append({"role": "assistant", "content": text_content})
                     messages.append({"role": "user", "content": f"Resultado de {func_name}: {text_tool_result}"})
-                    final_response = await run_in_threadpool(client.chat.completions.create, 
+                    final_response = await _tracked_completion(db, tenant.id, key_id, provider, model_name, client.chat.completions.create, 
                         model=model_name,
                         messages=messages,
                         extra_headers=extra_headers
@@ -715,7 +741,7 @@ async def run_conversational_agent(
                     })
 
                     print(f"[IA] Enviando resultado de herramienta a OpenRouter para obtener respuesta conversacional final...")
-                    final_response = await run_in_threadpool(client.chat.completions.create, 
+                    final_response = await _tracked_completion(db, tenant.id, key_id, provider, model_name, client.chat.completions.create, 
                         model=model_name,
                         messages=messages,
                         extra_headers=extra_headers
@@ -749,7 +775,7 @@ async def run_conversational_agent(
                     messages.append({"role": role, "content": msg.content})
                 messages.append({"role": "user", "content": user_message})
 
-                response = await run_in_threadpool(client.chat.completions.create, 
+                response = await _tracked_completion(db, tenant.id, key_id, provider, model_name, client.chat.completions.create, 
                     model=model_name or "deepseek-chat",
                     messages=messages,
                     tools=openai_tools,
@@ -773,7 +799,7 @@ async def run_conversational_agent(
                     print(f"[IA] Ejecutando llamada de texto en DeepSeek para '{func_name}'...")
                     messages.append({"role": "assistant", "content": text_content})
                     messages.append({"role": "user", "content": f"Resultado de {func_name}: {text_tool_result}"})
-                    final_response = await run_in_threadpool(client.chat.completions.create, 
+                    final_response = await _tracked_completion(db, tenant.id, key_id, provider, model_name, client.chat.completions.create, 
                         model=model_name or "deepseek-chat",
                         messages=messages
                     )
@@ -842,7 +868,7 @@ async def run_conversational_agent(
                     })
 
                     print(f"[IA] Enviando resultado de herramienta a DeepSeek para obtener respuesta conversacional final...")
-                    final_response = await run_in_threadpool(client.chat.completions.create, 
+                    final_response = await _tracked_completion(db, tenant.id, key_id, provider, model_name, client.chat.completions.create, 
                         model=model_name or "deepseek-chat",
                         messages=messages
                     )
@@ -890,7 +916,7 @@ async def run_conversational_agent(
                 })
 
                 print(f"[IA] Enviando solicitud a {gemini_model_name}...")
-                response = model.generate_content(contents)
+                response = await _tracked_gemini(db, tenant.id, key_id, provider, gemini_model_name, model, contents)
 
                 # Intentar parsear si el modelo generó texto con la función en vez de usar native tool_calls
                 text_content = response.text or ""
@@ -907,7 +933,7 @@ async def run_conversational_agent(
                     print(f"[IA] Ejecutando llamada de texto en Gemini para '{func_name}'...")
                     contents.append({"role": "model", "parts": [text_content]})
                     contents.append({"role": "user", "parts": [f"Resultado de {func_name}: {text_tool_result}"]})
-                    final_response = model.generate_content(contents)
+                    final_response = await _tracked_gemini(db, tenant.id, key_id, provider, gemini_model_name, model, contents)
                     final_text = final_response.text
                     if not final_text or not str(final_text).strip():
 
@@ -967,7 +993,7 @@ async def run_conversational_agent(
                         })
 
                         print(f"[IA] Enviando resultado de herramienta a Gemini para obtener la respuesta conversacional final...")
-                        final_response = model.generate_content(contents)
+                        final_response = await _tracked_gemini(db, tenant.id, key_id, provider, gemini_model_name, model, contents)
                         print(f"[IA] Respuesta final post-herramienta generada: '{final_response.text}'")
                         if key_id:
                             balancer.update_last_used(db, key_id)

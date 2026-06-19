@@ -199,11 +199,27 @@ class PlatformAIKey(Base):
     model_name = Column(String(100), nullable=False) # Ej: 'gemini-2.0-flash', 'llama-3.3-70b-versatile'
     supports_tools = Column(Boolean, default=True) # Si el modelo soporta Function Calling
     is_active = Column(Boolean, default=True)
+    tasks = Column(JSON, default=["CONVERSATION", "TOOL_CALLING"]) # Permite distribuir la carga
+    spending_limit = Column(Numeric(10, 2), nullable=True) # Crédito o límite en dólares
+    current_spend = Column(Numeric(10, 6), default=0.0) # Acumulado gastado
     
     # Métricas de Salud del Balanceador
     failed_attempts = Column(Integer, default=0)
     cool_down_until = Column(DateTime, nullable=True) # Timestamp hasta el cual está bloqueada por error 429
     last_used = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class AITenantUsage(Base):
+    __tablename__ = "ai_tenant_usage"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    ai_key_id = Column(UUID(as_uuid=True), ForeignKey("platform_ai_keys.id", ondelete="SET NULL"), nullable=True)
+    provider = Column(String(50), nullable=False)
+    model_name = Column(String(100), nullable=False)
+    input_tokens = Column(Integer, default=0)
+    output_tokens = Column(Integer, default=0)
+    total_cost = Column(Numeric(10, 6), default=0.0)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 

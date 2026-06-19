@@ -35,6 +35,9 @@ def startup_db_migration():
     try:
         db.execute(text("ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_method VARCHAR(30) DEFAULT 'DELIVERY';"))
         db.execute(text("ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_address TEXT;"))
+        db.execute(text("ALTER TABLE platform_ai_keys ADD COLUMN IF NOT EXISTS tasks JSON DEFAULT '[\"CONVERSATION\", \"TOOL_CALLING\"]';"))
+        db.execute(text("ALTER TABLE platform_ai_keys ADD COLUMN IF NOT EXISTS spending_limit NUMERIC(10, 2) DEFAULT NULL;"))
+        db.execute(text("ALTER TABLE platform_ai_keys ADD COLUMN IF NOT EXISTS current_spend NUMERIC(10, 6) DEFAULT 0.0;"))
         db.commit()
         print("[MIGRATION] Startup database migrations completed successfully.")
     except Exception as e:
@@ -296,12 +299,15 @@ def refund_super_transaction(tx_id: str, db: Session = Depends(get_db)):
     db.refresh(tx)
     return tx
 
+from typing import Optional
 class AIKeyCreate(BaseModel):
     provider: str
     name: str
     api_key: str
     model_name: str
     supports_tools: bool = True
+    tasks: Optional[str] = None
+    spending_limit: Optional[float] = None
 
 @app.get("/api/super/ai-keys")
 def get_super_ai_keys(db: Session = Depends(get_db)):
@@ -318,6 +324,9 @@ def get_super_ai_keys(db: Session = Depends(get_db)):
             "model_name": k.model_name,
             "supports_tools": k.supports_tools,
             "is_active": k.is_active,
+            "tasks": k.tasks,
+            "spending_limit": float(k.spending_limit) if k.spending_limit is not None else None,
+            "current_spend": float(k.current_spend) if k.current_spend is not None else 0.0,
             "failed_attempts": k.failed_attempts,
             "cool_down_until": k.cool_down_until.strftime("%Y-%m-%dT%H:%M:%SZ") if k.cool_down_until else None,
             "last_used": k.last_used.strftime("%Y-%m-%dT%H:%M:%SZ") if k.last_used else None,
@@ -336,6 +345,8 @@ def create_super_ai_key(data: AIKeyCreate, db: Session = Depends(get_db)):
         api_key=encrypted,
         model_name=data.model_name,
         supports_tools=data.supports_tools,
+        tasks=data.tasks,
+        spending_limit=data.spending_limit,
         is_active=True
     )
     db.add(new_key)
@@ -347,6 +358,9 @@ def create_super_ai_key(data: AIKeyCreate, db: Session = Depends(get_db)):
         "name": new_key.name,
         "model_name": new_key.model_name,
         "supports_tools": new_key.supports_tools,
+        "tasks": new_key.tasks,
+        "spending_limit": float(new_key.spending_limit) if new_key.spending_limit is not None else None,
+        "current_spend": 0.0,
         "is_active": new_key.is_active
     }
 
@@ -375,6 +389,30 @@ def delete_super_ai_key(key_id: str, db: Session = Depends(get_db)):
     db.delete(key_record)
     db.commit()
     return {"status": "success", "message": "AI Key deleted"}
+
+@app.get("/api/super/ai-usage")
+def get_ai_usage_stats(db: Session = Depends(get_db)):
+    from sqlalchemy import func
+    from backend.models import AITenantUsage, Tenant
+    # Group by tenant
+    results = db.query(
+        AITenantUsage.tenant_id,
+        Tenant.name,
+        func.sum(AITenantUsage.input_tokens).label("total_input"),
+        func.sum(AITenantUsage.output_tokens).label("total_output"),
+        func.sum(AITenantUsage.total_cost).label("total_cost")
+    ).join(Tenant, Tenant.id == AITenantUsage.tenant_id).group_by(AITenantUsage.tenant_id, Tenant.name).all()
+    
+    usage_list = []
+    for r in results:
+        usage_list.append({
+            "tenant_id": str(r.tenant_id),
+            "tenant_name": r.name,
+            "input_tokens": int(r.total_input or 0),
+            "output_tokens": int(r.total_output or 0),
+            "total_cost": float(r.total_cost or 0.0)
+        })
+    return usage_list
 
 # ─── Tenant Admin Endpoints (Multi-Tenant with RLS) ───────────────────────────
 from backend.database import get_tenant_db

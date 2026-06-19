@@ -24,13 +24,15 @@ def decrypt_key(encrypted_key: str) -> str:
     return fernet.decrypt(encrypted_key.encode()).decode()
 
 class AILoadBalancer:
-    def get_next_available_key(self, db: Session, requires_tools: bool = True, exclude_ids: List[uuid.UUID] = None) -> Optional[PlatformAIKey]:
+    def get_next_available_key(self, db: Session, task: str = None, requires_tools: bool = True, exclude_ids: List[uuid.UUID] = None) -> Optional[PlatformAIKey]:
         """
         Retorna la siguiente clave API disponible que:
         1. Esté activa (is_active == True)
         2. No esté en periodo de enfriamiento (cool_down_until es nulo o menor al tiempo actual)
         3. Si requiere herramientas, que sea compatible (supports_tools == True)
         4. No esté en la lista de claves excluidas (exclude_ids)
+        5. Tenga asignada la tarea solicitada
+        6. No haya excedido su límite de gasto (spending_limit)
         
         Ordena por menor tiempo de último uso (last_used) o fecha de creación
         para distribuir equitativamente (Round-Robin).
@@ -56,7 +58,7 @@ class AILoadBalancer:
             PlatformAIKey.cool_down_until < now
         )
         
-        key = db.query(PlatformAIKey).filter(
+        keys = db.query(PlatformAIKey).filter(
             and_(
                 PlatformAIKey.is_active == True,
                 cool_down_filter,
@@ -66,14 +68,18 @@ class AILoadBalancer:
         ).order_by(
             PlatformAIKey.last_used.asc().nullsfirst(),
             PlatformAIKey.created_at.asc()
-        ).first()
+        ).all()
         
-        if key:
+        for key in keys:
+            if key.spending_limit and key.current_spend >= key.spending_limit:
+                continue
+            if task and key.tasks and task not in key.tasks and "ALL" not in key.tasks:
+                continue
             return key
             
         # 2. Fallback: Si todas están en enfriamiento, tomamos la que esté más cerca de expirar su bloqueo (excluyendo las ya intentadas)
-        print("[BALANCER] Todas las claves de base de datos están en enfriamiento o excluidas. Intentando fallback...")
-        key_fallback = db.query(PlatformAIKey).filter(
+        print("[BALANCER] Todas las claves de base de datos están en enfriamiento, excluidas, sin saldo o sin tarea asignada. Intentando fallback...")
+        keys_fallback = db.query(PlatformAIKey).filter(
             and_(
                 PlatformAIKey.is_active == True,
                 tools_filter,
@@ -82,9 +88,16 @@ class AILoadBalancer:
         ).order_by(
             PlatformAIKey.cool_down_until.asc(),
             PlatformAIKey.last_used.asc().nullsfirst()
-        ).first()
+        ).all()
         
-        return key_fallback
+        for key in keys_fallback:
+            if key.spending_limit and key.current_spend >= key.spending_limit:
+                continue
+            if task and key.tasks and task not in key.tasks and "ALL" not in key.tasks:
+                continue
+            return key
+            
+        return None
 
     def mark_cool_down(self, db: Session, key_id: uuid.UUID, minutes: int = 5):
         """Marca una clave API en periodo de enfriamiento tras un error 429/cuotas"""
@@ -105,3 +118,46 @@ class AILoadBalancer:
             key.cool_down_until = None
             db.commit()
             print(f"[BALANCER] Clave '{key.name}' usada exitosamente. Contador de fallos reiniciado.")
+
+def record_ai_usage(db: Session, tenant_id: uuid.UUID, key_id: uuid.UUID, provider: str, model_name: str, input_tokens: int, output_tokens: int):
+    """Calcula y registra el costo del consumo de tokens."""
+    if not input_tokens and not output_tokens:
+        return
+        
+    # Costos base aproximados por 1 Millón de tokens
+    costs_per_1m = {
+        "gemini-2.0-flash": {"input": 0.15, "output": 0.60},
+        "gemini-1.5-flash": {"input": 0.075, "output": 0.30},
+        "deepseek-chat": {"input": 0.14, "output": 0.28},
+        "llama-3.3-70b-versatile": {"input": 0.59, "output": 0.79},
+        "gpt-4o-mini": {"input": 0.15, "output": 0.60},
+        "gpt-4o": {"input": 5.0, "output": 15.0},
+    }
+    
+    rate = costs_per_1m.get(model_name, {"input": 0.15, "output": 0.60}) # Fallback por defecto
+    cost = (input_tokens / 1000000.0) * rate["input"] + (output_tokens / 1000000.0) * rate["output"]
+    
+    from backend.models import AITenantUsage, PlatformAIKey
+    usage = AITenantUsage(
+        tenant_id=tenant_id,
+        ai_key_id=key_id,
+        provider=provider,
+        model_name=model_name,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        total_cost=cost
+    )
+    db.add(usage)
+    
+    if key_id:
+        key = db.query(PlatformAIKey).filter(PlatformAIKey.id == key_id).first()
+        if key:
+            # key.current_spend might be None or Decimal.
+            current = float(key.current_spend) if key.current_spend else 0.0
+            key.current_spend = current + cost
+            
+    try:
+        db.commit()
+    except Exception as e:
+        print(f"[BALANCER] Error guardando uso de IA: {e}")
+        db.rollback()
