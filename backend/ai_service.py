@@ -84,16 +84,19 @@ async def parse_catalog_document_to_products(content: str, db=None) -> List[Dict
     """
     import json
     from openai import OpenAI
-    from backend.ai_balancer import AIBalancer
+    from backend.models import PlatformAIKey
+    from backend.ai_balancer import decrypt_key
     try:
         api_key = None
         base_url = "https://api.deepseek.com"
         
         if db:
-            balancer = AIBalancer()
-            key_record = balancer.get_next_key(db, "deepseek")
+            key_record = db.query(PlatformAIKey).filter(
+                PlatformAIKey.is_active == True,
+                PlatformAIKey.provider == "deepseek"
+            ).first()
             if key_record:
-                api_key = key_record.api_key
+                api_key = decrypt_key(key_record.api_key)
         
         if not api_key:
             print("[IA] No se encontró API Key de DeepSeek para extracción. Abortando.")
@@ -107,12 +110,12 @@ async def parse_catalog_document_to_products(content: str, db=None) -> List[Dict
         prompt = (
             "Analiza el siguiente texto que contiene un catálogo o menú de productos y extrae "
             "todos los productos en formato JSON. Cada producto debe tener los siguientes campos:\n"
-            "- name: Nombre del producto (ej: 'Pizza Pepperoni Familiar')\n"
+            "- name: Nombre del producto (ej: 'Pizza Pepperoni Familiar'). Si el texto tiene múltiples tamaños/precios (ej: Regular y Familiar), crea un producto individual para CADA tamaño, incluyendo el tamaño en el nombre.\n"
             "- description: Descripción corta (ej: 'Con doble queso y pepperoni')\n"
             "- price: Precio numérico decimal (ej: 14.99)\n"
-            "- stock: Cantidad disponible (usa 10 por defecto si no se menciona)\n"
+            "- stock: Cantidad disponible (usa 100 por defecto si no se menciona)\n"
             "- category: Categoría del producto (ej: 'Pizzas', 'Bebidas')\n\n"
-            "Retorna EXCLUSIVAMENTE un arreglo JSON válido sin markdown.\n\n"
+            "Retorna EXCLUSIVAMENTE un arreglo JSON válido sin markdown ni texto adicional.\n\n"
             f"Texto:\n{content}"
         )
         
