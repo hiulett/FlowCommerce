@@ -1583,13 +1583,25 @@ function DashboardView({ orders, showToast, searchQuery }: { orders:Order[]; sho
 // ── AI Knowledge ───────────────────────────────────────────────────────────────
 function AIKnowledgeView({ showToast, searchQuery }: { showToast:(m:string,t?:ToastMsg['type'])=>void; searchQuery:string }) {
   const [docs,setDocs]=useState<KBDocument[]>([]);
-  const [modal,setModal]=useState<'upload'|'edit'|'delete'|'train'|null>(null);
+  const [products,setProducts]=useState<any[]>([]);
+  const [modal,setModal]=useState<'upload'|'edit'|'delete'|'train'|'deleteProduct'|null>(null);
   const [selected,setSelected]=useState<KBDocument|null>(null);
+  const [selectedProduct,setSelectedProduct]=useState<any|null>(null);
   const [systemPrompt,setSystemPrompt]=useState('');
   const typeColors:Record<KBDocument['type'],string>={FAQ:'badge-new',CATALOG:'badge-active',POLICY:'badge-delivered',PROMO:'badge-preparing'};
   const iconColors:Record<KBDocument['type'],string>={CATALOG:'indigo',PROMO:'orange',POLICY:'blue',FAQ:'green'};
 
+  const fetchProducts = () => {
+    fetch(API_BASE_URL + '/api/tenant/products', {
+      headers: { 'X-Tenant-ID': '40446806-0107-6201-9310-c9943efb3870' }
+    })
+      .then(res => res.json())
+      .then(data => setProducts(data))
+      .catch(err => console.error("Error fetching products:", err));
+  };
+
   useEffect(() => {
+    fetchProducts();
     // Fetch documents
     fetch(API_BASE_URL + '/api/tenant/documents', {
       headers: { 'X-Tenant-ID': '40446806-0107-6201-9310-c9943efb3870' }
@@ -1719,10 +1731,25 @@ function AIKnowledgeView({ showToast, searchQuery }: { showToast:(m:string,t?:To
       .then(res => res.json())
       .then(() => {
         setDocs(prev => prev.map(d => ({ ...d, status: 'TRAINED' })));
-        showToast('Modelo entrenado correctamente', 'success');
+        fetchProducts();
+        showToast('Modelo entrenado y productos extraídos correctamente', 'success');
         setModal(null);
       })
       .catch(err => console.error("Error training model:", err));
+  };
+
+  const handleDeleteProduct = () => {
+    if (!selectedProduct) return;
+    fetch(`${API_BASE_URL}/api/tenant/products/${selectedProduct.id}`, {
+      method: 'DELETE',
+      headers: { 'X-Tenant-ID': '40446806-0107-6201-9310-c9943efb3870' }
+    })
+      .then(() => {
+        setProducts(prev => prev.filter(p => p.id !== selectedProduct.id));
+        showToast('Producto eliminado', 'success');
+        setModal(null);
+      })
+      .catch(err => console.error("Error deleting product:", err));
   };
 
   const filteredDocs = docs.filter(d => {
@@ -1788,8 +1815,51 @@ function AIKnowledgeView({ showToast, searchQuery }: { showToast:(m:string,t?:To
           </div>
         </div>
       </div>
+
+      <div className="card" style={{marginTop: 24}}>
+        <div className="nexus-indicator"/>
+        <div className="card-body">
+          <div className="section-title"><MI name="restaurant_menu"/>Catálogo de Productos Extraídos por IA</div>
+          <p style={{fontSize: 13, color: 'var(--color-outline)', marginBottom: 16}}>
+            La IA extrae automáticamente los productos, precios y categorías desde tus documentos de tipo "CATALOG" o "Menú" cuando entrenas el modelo. Estos productos se utilizan para sugerencias y ventas directas en WhatsApp.
+          </p>
+          {products.length === 0 ? (
+            <div className="empty-state">
+              <MI name="inventory_2" style={{fontSize:48,color:'var(--color-outline-variant)'}}/>
+              <p>No hay productos extraídos. Sube tu menú y haz clic en "Entrenar Modelo".</p>
+            </div>
+          ) : (
+            <table className="table" style={{width:'100%',textAlign:'left',borderCollapse:'collapse'}}>
+              <thead>
+                <tr>
+                  <th style={{padding:'12px',borderBottom:'1px solid var(--color-surface-variant)'}}>Nombre</th>
+                  <th style={{padding:'12px',borderBottom:'1px solid var(--color-surface-variant)'}}>Descripción</th>
+                  <th style={{padding:'12px',borderBottom:'1px solid var(--color-surface-variant)'}}>Categoría</th>
+                  <th style={{padding:'12px',borderBottom:'1px solid var(--color-surface-variant)'}}>Precio</th>
+                  <th style={{padding:'12px',borderBottom:'1px solid var(--color-surface-variant)'}}>Acción</th>
+                </tr>
+              </thead>
+              <tbody>
+                {products.map(p => (
+                  <tr key={p.id}>
+                    <td style={{padding:'12px',borderBottom:'1px solid var(--color-surface-variant)',fontWeight:600}}>{p.name}</td>
+                    <td style={{padding:'12px',borderBottom:'1px solid var(--color-surface-variant)',fontSize:13,color:'var(--color-on-surface-variant)'}}>{p.description || '-'}</td>
+                    <td style={{padding:'12px',borderBottom:'1px solid var(--color-surface-variant)'}}><span className="badge badge-active">{p.category}</span></td>
+                    <td style={{padding:'12px',borderBottom:'1px solid var(--color-surface-variant)'}}>${p.price.toFixed(2)}</td>
+                    <td style={{padding:'12px',borderBottom:'1px solid var(--color-surface-variant)'}}>
+                      <button className="btn btn-ghost" style={{padding:'4px',color:'var(--color-error)'}} onClick={()=>{setSelectedProduct(p);setModal('deleteProduct');}}><MI name="delete"/></button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+
       {(modal==='upload'||modal==='edit')&&<DocumentModal document={modal==='edit'?selected??undefined:undefined} onClose={()=>setModal(null)} onSave={handleSaveDoc}/>}
       {modal==='delete'&&selected&&<DeleteModal title={`¿Eliminar "${selected.title}"?`} description="Se eliminará de la base de conocimiento." onClose={()=>setModal(null)} onConfirm={handleDeleteDoc}/>}
+      {modal==='deleteProduct'&&selectedProduct&&<DeleteModal title={`¿Eliminar "${selectedProduct.name}"?`} description="Este producto ya no estará disponible para la IA." onClose={()=>setModal(null)} onConfirm={handleDeleteProduct}/>}
       {modal==='train'&&<TrainModelModal onClose={()=>setModal(null)} showToast={handleTrainModel}/>}
     </div>
   );

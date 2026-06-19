@@ -674,7 +674,38 @@ async def train_tenant_documents(db: Session = Depends(get_tenant_db)):
     return {"status": "trained", "count": len(docs), "products_extracted": parsed_count}
 
 
-@app.get("/api/tenant/orders")
+@app.get("/api/tenant/products")
+def get_tenant_products(db: Session = Depends(get_tenant_db)):
+    from backend.models import Product
+    products = db.query(Product).filter(Product.is_active == True).order_by(Product.name).all()
+    result = []
+    for p in products:
+        result.append({
+            "id": str(p.id),
+            "name": p.name,
+            "description": p.description,
+            "price": float(p.price),
+            "stock": p.stock,
+            "category": p.category.name if p.category else "General"
+        })
+    return result
+
+@app.delete("/api/tenant/products/{product_id}")
+def delete_tenant_product(product_id: str, db: Session = Depends(get_tenant_db)):
+    from backend.models import Product
+    import uuid
+    try:
+        prod_uuid = uuid.UUID(product_id)
+        prod = db.query(Product).filter(Product.id == prod_uuid).first()
+        if not prod:
+            raise HTTPException(status_code=404, detail="Product not found")
+        prod.is_active = False # Soft delete
+        db.commit()
+        return {"status": "deleted"}
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid product ID")
+
+
 def get_tenant_orders(db: Session = Depends(get_tenant_db)):
     orders = db.query(Order).order_by(Order.created_at.desc()).all()
     result = []
