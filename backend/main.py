@@ -1352,3 +1352,94 @@ def get_product_analytics(db: Session = Depends(get_tenant_db)):
         
     result.sort(key=lambda x: x["sold"], reverse=True)
     return {"products": result}
+
+class FinanceSettingsUpdate(BaseModel):
+    tax_active: Optional[bool] = None
+    tax_percentage: Optional[float] = None
+    base_delivery_fee: Optional[float] = None
+
+@app.put("/api/tenant/settings/finance")
+def update_finance_settings(data: FinanceSettingsUpdate, db: Session = Depends(get_tenant_db), req: Request = None):
+    from backend.models import Tenant
+    tenant_id = req.headers.get("X-Tenant-ID")
+    if not tenant_id:
+        raise HTTPException(status_code=400, detail="X-Tenant-ID missing")
+    tenant = db.query(Tenant).filter(Tenant.id == uuid.UUID(tenant_id)).first()
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+        
+    if data.tax_active is not None:
+        tenant.tax_active = data.tax_active
+    if data.tax_percentage is not None:
+        tenant.tax_percentage = Decimal(str(data.tax_percentage))
+    if data.base_delivery_fee is not None:
+        tenant.base_delivery_fee = Decimal(str(data.base_delivery_fee))
+        
+    db.commit()
+    return {"status": "success"}
+
+@app.get("/api/tenant/settings/finance")
+def get_finance_settings(db: Session = Depends(get_tenant_db), req: Request = None):
+    from backend.models import Tenant
+    tenant_id = req.headers.get("X-Tenant-ID")
+    if not tenant_id:
+        raise HTTPException(status_code=400, detail="X-Tenant-ID missing")
+    tenant = db.query(Tenant).filter(Tenant.id == uuid.UUID(tenant_id)).first()
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+        
+    return {
+        "tax_active": tenant.tax_active,
+        "tax_percentage": float(tenant.tax_percentage or 0),
+        "base_delivery_fee": float(tenant.base_delivery_fee or 0)
+    }
+
+@app.get("/api/tenant/invoices")
+def get_invoices(db: Session = Depends(get_tenant_db)):
+    from backend.models import Invoice, Order, Customer
+    invoices = db.query(Invoice).all()
+    result = []
+    for inv in invoices:
+        order = db.query(Order).filter(Order.id == inv.order_id).first()
+        customer_name = order.customer.full_name if order and order.customer else "Unknown"
+        result.append({
+            "id": str(inv.id),
+            "invoice_number": inv.invoice_number,
+            "order_id": str(inv.order_id),
+            "customer_name": customer_name,
+            "status": inv.status,
+            "subtotal": float(inv.subtotal),
+            "tax_amount": float(inv.tax_amount),
+            "delivery_fee": float(inv.delivery_fee),
+            "total_amount": float(inv.total_amount),
+            "issued_at": inv.issued_at.isoformat() if inv.issued_at else None,
+            "due_date": inv.due_date.isoformat() if inv.due_date else None,
+            "payment_method": inv.payment_method
+        })
+    return {"invoices": result}
+
+class InvoiceUpdate(BaseModel):
+    status: Optional[str] = None
+    due_date: Optional[str] = None
+    payment_method: Optional[str] = None
+
+@app.put("/api/tenant/invoices/{invoice_id}")
+def update_invoice(invoice_id: str, data: InvoiceUpdate, db: Session = Depends(get_tenant_db)):
+    from backend.models import Invoice
+    inv = db.query(Invoice).filter(Invoice.id == uuid.UUID(invoice_id)).first()
+    if not inv:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+        
+    if inv.status == "PAID":
+        raise HTTPException(status_code=400, detail="Cannot edit a PAID invoice")
+        
+    if data.status:
+        inv.status = data.status
+    if data.payment_method:
+        inv.payment_method = data.payment_method
+    if data.due_date:
+        from dateutil import parser
+        inv.due_date = parser.parse(data.due_date)
+        
+    db.commit()
+    return {"status": "success"}

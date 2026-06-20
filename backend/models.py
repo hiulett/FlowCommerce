@@ -24,12 +24,19 @@ class Tenant(Base):
     ai_spending_limit = Column(Numeric(10, 2), nullable=True) # Limite de gasto en dolares para la IA
     business_rules = Column(Text, nullable=True) # Horarios, envíos, reglas del negocio
     sales_techniques = Column(Text, nullable=True) # Directrices de comportamiento, tono, técnicas de venta
+    
+    # Configuraciones financieras
+    tax_active = Column(Boolean, default=False)
+    tax_percentage = Column(Numeric(5, 2), default=0.00)
+    base_delivery_fee = Column(Numeric(10, 2), default=0.00)
+    
     created_at = Column(DateTime, default=datetime.utcnow)
 
     users = relationship("User", back_populates="tenant", cascade="all, delete-orphan")
     products = relationship("Product", back_populates="tenant", cascade="all, delete-orphan")
     customers = relationship("Customer", back_populates="tenant", cascade="all, delete-orphan")
     orders = relationship("Order", back_populates="tenant", cascade="all, delete-orphan")
+    invoices = relationship("Invoice", back_populates="tenant", cascade="all, delete-orphan")
 
 class User(Base):
     __tablename__ = "users"
@@ -103,6 +110,26 @@ class Order(Base):
     customer = relationship("Customer", back_populates="orders")
     items = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")
     payment = relationship("Payment", back_populates="order", uselist=False, cascade="all, delete-orphan")
+    invoice = relationship("Invoice", back_populates="order", uselist=False, cascade="all, delete-orphan")
+
+class Invoice(Base):
+    __tablename__ = "invoices"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False)
+    order_id = Column(UUID(as_uuid=True), ForeignKey("orders.id"), unique=True, nullable=False)
+    invoice_number = Column(String(50), nullable=False)
+    status = Column(String(30), default="PENDING") # PENDING, PAID, CANCELLED
+    subtotal = Column(Numeric(10, 2), default=0.00)
+    tax_amount = Column(Numeric(10, 2), default=0.00)
+    delivery_fee = Column(Numeric(10, 2), default=0.00)
+    total_amount = Column(Numeric(10, 2), default=0.00)
+    issued_at = Column(DateTime, default=datetime.utcnow)
+    due_date = Column(DateTime, nullable=True)
+    payment_method = Column(String(50), nullable=True)
+
+    tenant = relationship("Tenant", back_populates="invoices")
+    order = relationship("Order", back_populates="invoice")
 
 class OrderItem(Base):
     __tablename__ = "order_items"

@@ -1,11 +1,20 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
-from backend.models import Order, OrderItem, Product, Customer
+from backend.models import Order, OrderItem, Product, Customer, Invoice, Tenant
 import asyncio
 from backend.events import notify_new_order
 import uuid
 from decimal import Decimal
+import random
 from typing import Dict, Any, Tuple
+
+def generate_invoice_number(db: Session, tenant_id: uuid.UUID) -> str:
+    # Genera un número secuencial simple o aleatorio de 6 dígitos
+    while True:
+        num = f"INV-{random.randint(100000, 999999)}"
+        exists = db.query(Invoice).filter(Invoice.tenant_id == tenant_id, Invoice.invoice_number == num).first()
+        if not exists:
+            return num
 
 def get_or_create_active_order(db: Session, tenant_id: uuid.UUID, customer_id: uuid.UUID) -> Order:
     """
@@ -28,6 +37,23 @@ def get_or_create_active_order(db: Session, tenant_id: uuid.UUID, customer_id: u
             total_amount=Decimal("0.00")
         )
         db.add(order)
+        db.flush() # Para obtener order.id
+        
+        # Crear factura inicial (Proforma)
+        tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+        delivery_fee = tenant.base_delivery_fee if tenant and tenant.base_delivery_fee else Decimal("0.00")
+        
+        invoice = Invoice(
+            tenant_id=tenant_id,
+            order_id=order.id,
+            invoice_number=generate_invoice_number(db, tenant_id),
+            status="PENDING",
+            subtotal=Decimal("0.00"),
+            tax_amount=Decimal("0.00"),
+            delivery_fee=delivery_fee,
+            total_amount=delivery_fee
+        )
+        db.add(invoice)
         db.commit()
         db.refresh(order)
     return order
@@ -192,9 +218,26 @@ def recalculate_order_total(db: Session, order_id: uuid.UUID):
     if not order:
         return
 
-    total = Decimal("0.00")
+    subtotal = Decimal("0.00")
     for item in order.items:
-        total += Decimal(str(item.quantity)) * Decimal(str(item.price))
+        subtotal += Decimal(str(item.quantity)) * Decimal(str(item.price))
     
-    order.total_amount = total
+    order.total_amount = subtotal # Por ahora sin taxes en order
+    
+    invoice = db.query(Invoice).filter(Invoice.order_id == order_id).first()
+    if invoice:
+        tenant = db.query(Tenant).filter(Tenant.id == order.tenant_id).first()
+        tax_amount = Decimal("0.00")
+        if tenant and tenant.tax_active:
+            tax_amount = subtotal * (tenant.tax_percentage / Decimal("100"))
+        
+        delivery_fee = tenant.base_delivery_fee if tenant and tenant.base_delivery_fee else Decimal("0.00")
+        
+        invoice.subtotal = subtotal
+        invoice.tax_amount = tax_amount
+        invoice.delivery_fee = delivery_fee
+        invoice.total_amount = subtotal + tax_amount + delivery_fee
+        
+        order.total_amount = invoice.total_amount
+        
     db.commit()
