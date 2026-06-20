@@ -71,6 +71,7 @@ class Product(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False)
     category_id = Column(UUID(as_uuid=True), ForeignKey("categories.id"), nullable=True)
+    knowledge_document_id = Column(UUID(as_uuid=True), ForeignKey("knowledge_documents.id", ondelete="SET NULL"), nullable=True)
     name = Column(String(150), nullable=False)
     description = Column(Text, nullable=True)
     price = Column(Numeric(10, 2), nullable=False)
@@ -81,6 +82,7 @@ class Product(Base):
 
     tenant = relationship("Tenant", back_populates="products")
     category = relationship("Category", back_populates="products")
+    knowledge_document = relationship("KnowledgeDocument", back_populates="products")
 
 class Order(Base):
     __tablename__ = "orders"
@@ -189,8 +191,11 @@ class KnowledgeDocument(Base):
     type = Column(String(30), nullable=False) # FAQ, CATALOG, POLICY, PROMO, SALES_TECHNIQUE
     content = Column(Text, nullable=True)
     word_count = Column(Integer, default=0)
-    status = Column(String(20), default="PENDING") # PENDING, TRAINED
+    status = Column(String(20), default="PENDING") # PENDING, TRAINING, COMPLETED
+    is_active = Column(Boolean, default=True)
     last_updated = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    products = relationship("Product", back_populates="knowledge_document", cascade="all, delete-orphan")
 
 class PlatformAIKey(Base):
     __tablename__ = "platform_ai_keys"

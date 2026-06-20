@@ -502,7 +502,8 @@ class TenantSettingsUpdate(BaseModel):
 class DocumentCreateUpdate(BaseModel):
     title: str
     type: str
-    content: str = ""
+    content: str
+    is_active: Optional[bool] = None = ""
 
 class OrderStatusUpdate(BaseModel):
     status: str
@@ -718,10 +719,15 @@ def update_tenant_document(doc_id: str, data: DocumentCreateUpdate, db: Session 
     doc = db.query(KnowledgeDocument).filter(KnowledgeDocument.id == doc_uuid).first()
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
-    doc.title = data.title
-    doc.type = data.type
-    doc.content = data.content
-    doc.word_count = len([w for w in data.content.split() if w])
+    if data.title is not None:
+        doc.title = data.title
+    if data.type is not None:
+        doc.type = data.type
+    if data.content is not None:
+        doc.content = data.content
+        doc.word_count = len([w for w in data.content.split() if w])
+    if data.is_active is not None:
+        doc.is_active = data.is_active
     db.commit()
     db.refresh(doc)
     return doc
@@ -775,6 +781,8 @@ async def train_tenant_documents_task(tenant_id: str):
             for doc in catalog_docs:
                 if doc.content:
                     parsed = await parse_catalog_document_to_products(doc.content, db)
+                    for item in parsed:
+                        item["knowledge_document_id"] = doc.id
                     extracted_products.extend(parsed)
         
             if extracted_products:
@@ -789,6 +797,7 @@ async def train_tenant_documents_task(tenant_id: str):
                     price = item.get("price", 0.0)
                     stock = item.get("stock", 10)
                     category_name = item.get("category", "General")
+                    knowledge_document_id = item.get("knowledge_document_id")
                     
                     # Obtener o crear categoría
                     category = db.query(Category).filter(
@@ -813,14 +822,17 @@ async def train_tenant_documents_task(tenant_id: str):
                     if prod:
                         prod.description = description
                         prod.price = Decimal(str(price))
-                        prod.stock = stock
+                        prod.stock += stock # Fusionar: Sumar stock en lugar de sobreescribir
                         prod.category_id = category.id
                         prod.is_active = True
+                        if knowledge_document_id:
+                            prod.knowledge_document_id = knowledge_document_id # Reasignar al catálogo más reciente
                         prod.embedding = embedding_vector
                     else:
                         prod = Product(
                             tenant_id=tenant.id,
                             category_id=category.id,
+                            knowledge_document_id=knowledge_document_id,
                             name=name,
                             description=description,
                             price=Decimal(str(price)),
@@ -845,7 +857,7 @@ async def train_tenant_documents_task(tenant_id: str):
 
         docs = db.query(KnowledgeDocument).all()
         for doc in docs:
-            doc.status = "TRAINED"
+            doc.status = "COMPLETED"
         db.commit()
     except Exception as e:
         print(f"Error en entrenamiento de documentos: {e}")
@@ -855,9 +867,16 @@ async def train_tenant_documents_task(tenant_id: str):
 
 
 @app.get("/api/tenant/products")
-def get_tenant_products(db: Session = Depends(get_tenant_db)):
+def get_tenant_products(catalog_id: Optional[str] = None, db: Session = Depends(get_tenant_db)):
     from backend.models import Product
-    products = db.query(Product).filter(Product.is_active == True).order_by(Product.name).all()
+    import uuid
+    query = db.query(Product).filter(Product.is_active == True)
+    if catalog_id:
+        try:
+            query = query.filter(Product.knowledge_document_id == uuid.UUID(catalog_id))
+        except ValueError:
+            pass
+    products = query.order_by(Product.name).all()
     result = []
     for p in products:
         result.append({
@@ -866,10 +885,10 @@ def get_tenant_products(db: Session = Depends(get_tenant_db)):
             "description": p.description,
             "price": float(p.price),
             "stock": p.stock,
-            "category": p.category.name if p.category else "General"
+            "category": p.category.name if p.category else "General",
+            "knowledge_document_id": str(p.knowledge_document_id) if p.knowledge_document_id else None
         })
     return result
-
 @app.delete("/api/tenant/products/{product_id}")
 def delete_tenant_product(product_id: str, db: Session = Depends(get_tenant_db)):
     from backend.models import Product
@@ -1276,4 +1295,60 @@ async def send_operator_reply(conversation_id: str, data: OperatorReplyPayload, 
             detail="Error al enviar el mensaje de respuesta a través de Meta API."
         )
 
+class ProductUpdateParams(BaseModel):
+    price: Optional[float] = None
+    stock: Optional[int] = None
+    name: Optional[str] = None
+    is_active: Optional[bool] = None
 
+@app.put("/api/tenant/products/{product_id}")
+def update_tenant_product(product_id: str, data: ProductUpdateParams, db: Session = Depends(get_tenant_db)):
+    from backend.models import Product
+    from decimal import Decimal
+    import uuid
+    try:
+        prod_uuid = uuid.UUID(product_id)
+        prod = db.query(Product).filter(Product.id == prod_uuid).first()
+        if not prod:
+            raise HTTPException(status_code=404, detail="Product not found")
+        if data.price is not None:
+            prod.price = Decimal(str(data.price))
+        if data.stock is not None:
+            prod.stock = data.stock
+        if data.name is not None:
+            prod.name = data.name
+        if data.is_active is not None:
+            prod.is_active = data.is_active
+        db.commit()
+        return {"status": "updated"}
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid product ID")
+
+@app.get("/api/tenant/analytics/products")
+def get_product_analytics(db: Session = Depends(get_tenant_db)):
+    from backend.models import Product, OrderItem, Order
+    from sqlalchemy import func
+    
+    # Ranking de productos más vendidos
+    sold_data = db.query(
+        OrderItem.product_id, 
+        func.sum(OrderItem.quantity).label("total_sold")
+    ).join(Order).filter(Order.status != "CANCELLED").group_by(OrderItem.product_id).all()
+    
+    sold_map = {str(item.product_id): item.total_sold for item in sold_data}
+    products = db.query(Product).filter(Product.is_active == True).all()
+    
+    result = []
+    for p in products:
+        sold = sold_map.get(str(p.id), 0)
+        result.append({
+            "id": str(p.id),
+            "name": p.name,
+            "stock": p.stock,
+            "sold": int(sold),
+            "price": float(p.price),
+            "category": p.category.name if p.category else "General"
+        })
+        
+    result.sort(key=lambda x: x["sold"], reverse=True)
+    return {"products": result}

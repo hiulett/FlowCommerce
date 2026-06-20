@@ -1,8 +1,9 @@
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import InventoryView from './views/InventoryView';
 // ─── Types ─────────────────────────────────────────────────────────────────────
-type TabKey = 'dashboard' | 'ai-knowledge' | 'chats' | 'orders' | 'customers' | 'settings' | 'super-tenants' | 'super-plans' | 'super-billing' | 'super-ai-keys';
+type TabKey = 'dashboard' | 'inventory' | 'ai-knowledge' | 'chats' | 'orders' | 'customers' | 'settings' | 'super-tenants' | 'super-plans' | 'super-billing' | 'super-ai-keys';
 type SettingsTab = 'business-profile' | 'team-management' | 'whatsapp-integration' | 'billing-security';
 type OrderStatus = 'NEW' | 'CONFIRMED' | 'PREPARING' | 'READY' | 'SHIPPED' | 'DELIVERED';
 type CustomerStatus = 'ACTIVE' | 'INACTIVE';
@@ -1689,9 +1690,8 @@ function DashboardView({ orders, showToast, searchQuery }: { orders:Order[]; sho
 }
 
 // ── AI Knowledge ───────────────────────────────────────────────────────────────
-function AIKnowledgeView({ showToast, searchQuery }: { showToast:(m:string,t?:ToastMsg['type'])=>void; searchQuery:string }) {
+function AIKnowledgeView({ showToast, searchQuery, onNavigateToInventory }: { showToast:(m:string,t?:ToastMsg['type'])=>void; searchQuery:string, onNavigateToInventory: () => void }) {
   const [docs,setDocs]=useState<KBDocument[]>([]);
-  const [products,setProducts]=useState<any[]>([]);
   const [modal,setModal]=useState<'upload'|'edit'|'delete'|'train'|'deleteProduct'|'deleteAllProducts'|null>(null);
   const [selected,setSelected]=useState<KBDocument|null>(null);
   const [selectedProduct,setSelectedProduct]=useState<any|null>(null);
@@ -1701,14 +1701,7 @@ function AIKnowledgeView({ showToast, searchQuery }: { showToast:(m:string,t?:To
   const typeColors:Record<KBDocument['type'],string>={FAQ:'badge-new',CATALOG:'badge-active',POLICY:'badge-delivered',PROMO:'badge-preparing',SALES_TECHNIQUE:'badge-active'};
   const iconColors:Record<KBDocument['type'],string>={CATALOG:'indigo',PROMO:'orange',POLICY:'blue',FAQ:'green',SALES_TECHNIQUE:'amber'};
 
-  const fetchProducts = () => {
-    fetch(API_BASE_URL + '/api/tenant/products', {
-      headers: { 'X-Tenant-ID': '40446806-0107-6201-9310-c9943efb3870' }
-    })
-      .then(res => res.json())
-      .then(data => setProducts(data))
-      .catch(err => console.error("Error fetching products:", err));
-  };
+
 
   const fetchDocs = () => {
     fetch(API_BASE_URL + '/api/tenant/documents', {
@@ -1737,14 +1730,12 @@ function AIKnowledgeView({ showToast, searchQuery }: { showToast:(m:string,t?:To
     if (isTraining) {
       interval = setInterval(() => {
         fetchDocs();
-        fetchProducts();
       }, 3000);
     }
     return () => clearInterval(interval);
   }, [isTraining]);
 
   useEffect(() => {
-    fetchProducts();
     fetchDocs();
 
     // Fetch prompt
@@ -1873,32 +1864,7 @@ function AIKnowledgeView({ showToast, searchQuery }: { showToast:(m:string,t?:To
       .catch(err => console.error("Error training model:", err));
   };
 
-  const handleDeleteProduct = () => {
-    if (!selectedProduct) return;
-    fetch(`${API_BASE_URL}/api/tenant/products/${selectedProduct.id}`, {
-      method: 'DELETE',
-      headers: { 'X-Tenant-ID': '40446806-0107-6201-9310-c9943efb3870' }
-    })
-      .then(() => {
-        setProducts(prev => prev.filter(p => p.id !== selectedProduct.id));
-        showToast('Producto eliminado', 'success');
-        setModal(null);
-      })
-      .catch(err => console.error("Error deleting product:", err));
-  };
 
-  const handleDeleteAllProducts = () => {
-    fetch(`${API_BASE_URL}/api/tenant/products`, {
-      method: 'DELETE',
-      headers: { 'X-Tenant-ID': '40446806-0107-6201-9310-c9943efb3870' }
-    })
-      .then(() => {
-        setProducts([]);
-        showToast('Todos los productos eliminados', 'success');
-        setModal(null);
-      })
-      .catch(err => console.error("Error deleting all products:", err));
-  };
 
   const filteredDocs = docs.filter(d => {
     if (!searchQuery) return true;
@@ -1919,7 +1885,7 @@ function AIKnowledgeView({ showToast, searchQuery }: { showToast:(m:string,t?:To
         </div>
       </div>
       <div className="grid grid-cols-4 gap-4" style={{marginBottom:24}}>
-        {[{label:'Productos en Catálogo',value:products.length.toString(),icon:'restaurant_menu',color:'indigo'},{label:'Reglas de Negocio',value:businessRules ? 'Activado' : 'Inactivo',icon:'gavel',color:'blue'},{label:'Técnicas Venta',value:salesTechniques ? 'Activado' : 'Inactivo',icon:'record_voice_over',color:'amber'},{label:'Menús por Entrenar',value:docs.filter(d=>d.status==='PENDING').length.toString(),icon:'pending_actions',color:docs.filter(d=>d.status==='PENDING').length>0?'orange':'green'}].map(s=>(
+        {[{label:'Catálogos de Productos',value:docs.filter(d=>d.type==='CATALOG').length.toString(),icon:'restaurant_menu',color:'indigo'},{label:'Reglas de Negocio',value:businessRules ? 'Activado' : 'Inactivo',icon:'gavel',color:'blue'},{label:'Técnicas Venta',value:salesTechniques ? 'Activado' : 'Inactivo',icon:'record_voice_over',color:'amber'},{label:'Menús por Entrenar',value:docs.filter(d=>d.status==='PENDING').length.toString(),icon:'pending_actions',color:docs.filter(d=>d.status==='PENDING').length>0?'orange':'green'}].map(s=>(
           <div key={s.label} className="stat-card"><div className={`stat-icon ${s.color}`}><MI name={s.icon} filled/></div><div><div className="stat-label">{s.label}</div><div className="stat-value" style={{fontSize:22}}>{s.value}</div></div></div>
         ))}
       </div>
@@ -1966,41 +1932,46 @@ function AIKnowledgeView({ showToast, searchQuery }: { showToast:(m:string,t?:To
         <div className="nexus-indicator"/>
         <div className="card-body">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <div className="section-title" style={{ margin: 0 }}><MI name="restaurant_menu"/>Catálogo de Productos Extraídos por IA</div>
-            {products.length > 0 && (
-              <button className="btn btn-outline" style={{ color: 'var(--color-error)', borderColor: 'var(--color-error)' }} onClick={() => setModal('deleteAllProducts')}>
-                <MI name="delete_sweep"/> Borrar Todos
-              </button>
-            )}
+            <div className="section-title" style={{ margin: 0 }}><MI name="auto_awesome"/>Catálogos y Documentos de IA</div>
           </div>
           <p style={{fontSize: 13, color: 'var(--color-outline)', marginBottom: 16}}>
-            La IA extrae automáticamente los productos, precios y categorías desde tus documentos de tipo "CATALOG" o "Menú" cuando entrenas el modelo. Estos productos se utilizan para sugerencias y ventas directas en WhatsApp.
+            Administra los catálogos y documentos que entrenan a tu IA. Puedes activar, desactivar o editarlos.
           </p>
-          {products.length === 0 ? (
+          {filteredDocs.length === 0 ? (
             <div className="empty-state">
               <MI name="inventory_2" style={{fontSize:48,color:'var(--color-outline-variant)'}}/>
-              <p>No hay productos extraídos. Sube tu menú y haz clic en "Entrenar Modelo".</p>
+              <p>No hay documentos cargados. Sube uno y haz clic en "Entrenar Modelo".</p>
             </div>
           ) : (
             <table className="table" style={{width:'100%',textAlign:'left',borderCollapse:'collapse'}}>
               <thead>
                 <tr>
-                  <th style={{padding:'12px',borderBottom:'1px solid var(--color-surface-variant)'}}>Nombre</th>
-                  <th style={{padding:'12px',borderBottom:'1px solid var(--color-surface-variant)'}}>Descripción</th>
-                  <th style={{padding:'12px',borderBottom:'1px solid var(--color-surface-variant)'}}>Categoría</th>
-                  <th style={{padding:'12px',borderBottom:'1px solid var(--color-surface-variant)'}}>Precio</th>
-                  <th style={{padding:'12px',borderBottom:'1px solid var(--color-surface-variant)'}}>Acción</th>
+                  <th style={{padding:'12px',borderBottom:'1px solid var(--color-surface-variant)'}}>Nombre del Documento</th>
+                  <th style={{padding:'12px',borderBottom:'1px solid var(--color-surface-variant)'}}>Tipo</th>
+                  <th style={{padding:'12px',borderBottom:'1px solid var(--color-surface-variant)'}}>Fecha de Subida</th>
+                  <th style={{padding:'12px',borderBottom:'1px solid var(--color-surface-variant)'}}>Estado</th>
+                  <th style={{padding:'12px',borderBottom:'1px solid var(--color-surface-variant)',textAlign:'right'}}>Acciones</th>
                 </tr>
               </thead>
               <tbody>
-                {products.map(p => (
-                  <tr key={p.id}>
-                    <td style={{padding:'12px',borderBottom:'1px solid var(--color-surface-variant)',fontWeight:600}}>{p.name}</td>
-                    <td style={{padding:'12px',borderBottom:'1px solid var(--color-surface-variant)',fontSize:13,color:'var(--color-on-surface-variant)'}}>{p.description || '-'}</td>
-                    <td style={{padding:'12px',borderBottom:'1px solid var(--color-surface-variant)'}}><span className="badge badge-active">{p.category}</span></td>
-                    <td style={{padding:'12px',borderBottom:'1px solid var(--color-surface-variant)'}}>${p.price.toFixed(2)}</td>
+                {filteredDocs.map(d => (
+                  <tr key={d.id}>
+                    <td style={{padding:'12px',borderBottom:'1px solid var(--color-surface-variant)',fontWeight:600}}>{d.title}</td>
+                    <td style={{padding:'12px',borderBottom:'1px solid var(--color-surface-variant)'}}><span className={`badge ${typeColors[d.type]}`}>{KB_LABEL[d.type]}</span></td>
+                    <td style={{padding:'12px',borderBottom:'1px solid var(--color-surface-variant)',fontSize:13,color:'var(--color-on-surface-variant)'}}>{d.lastUpdated}</td>
                     <td style={{padding:'12px',borderBottom:'1px solid var(--color-surface-variant)'}}>
-                      <button className="btn btn-ghost" style={{padding:'4px',color:'var(--color-error)'}} onClick={()=>{setSelectedProduct(p);setModal('deleteProduct');}}><MI name="delete"/></button>
+                      <span className={`badge ${d.status === 'TRAINED' || d.status === 'COMPLETED' ? 'badge-delivered' : d.status === 'TRAINING' ? 'badge-preparing' : 'badge-new'}`}>
+                        {d.status === 'TRAINED' || d.status === 'COMPLETED' ? 'Entrenado' : d.status === 'TRAINING' ? 'Procesando...' : 'Pendiente'}
+                      </span>
+                    </td>
+                    <td style={{padding:'12px',borderBottom:'1px solid var(--color-surface-variant)',textAlign:'right'}}>
+                      {d.type === 'CATALOG' && (
+                        <button className="btn btn-ghost" style={{padding:'4px',marginRight:8, color:'var(--color-primary)'}} onClick={onNavigateToInventory} title="Ver Productos">
+                          <MI name="inventory_2"/>
+                        </button>
+                      )}
+                      <button className="btn btn-ghost" style={{padding:'4px',marginRight:8}} onClick={()=>{setSelected(d);setModal('edit');}}><MI name="edit"/></button>
+                      <button className="btn btn-ghost" style={{padding:'4px',color:'var(--color-error)'}} onClick={()=>{setSelected(d);setModal('delete');}}><MI name="delete"/></button>
                     </td>
                   </tr>
                 ))}
@@ -3981,6 +3952,7 @@ export default function App({ user, onLogout }: { user:{name:string;email:string
 
   const tabTitles:Record<TabKey,string>={
     dashboard: user.role==='SUPER_ADMIN' ? 'Dashboard Global' : 'Dashboard',
+    inventory: 'Inventario / Productos',
     'ai-knowledge':'AI Knowledge Base',
     chats: 'Chats en Vivo',
     orders:'Gestión de Pedidos',
@@ -4029,6 +4001,7 @@ export default function App({ user, onLogout }: { user:{name:string;email:string
           ) : (
             <>
               <NavItem icon="dashboard" label="Dashboard" active={activeTab==='dashboard'} onClick={()=>handleTabChange('dashboard')}/>
+              <NavItem icon="inventory_2" label="Productos" active={activeTab==='inventory'} onClick={()=>handleTabChange('inventory')}/>
               <NavItem icon="psychology" label="AI Knowledge Base" active={activeTab==='ai-knowledge'} onClick={()=>handleTabChange('ai-knowledge')}/>
               <NavItem icon="forum" label="Chats en Vivo" active={activeTab==='chats'} onClick={()=>handleTabChange('chats')}/>
               <NavItem icon="shopping_cart" label="Pedidos" active={activeTab==='orders'} onClick={()=>handleTabChange('orders')} badge={newCount}/>
