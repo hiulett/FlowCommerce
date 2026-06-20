@@ -503,7 +503,7 @@ class DocumentCreateUpdate(BaseModel):
     title: str
     type: str
     content: str
-    is_active: Optional[bool] = None = ""
+    is_active: Optional[bool] = None
 
 class OrderStatusUpdate(BaseModel):
     status: str
