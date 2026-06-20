@@ -4095,6 +4095,7 @@ export default function App({ user, onLogout }: { user:{name:string;email:string
           ) : (
             <>
               {activeTab==='dashboard'    &&<DashboardView orders={[...orders, ...delivered]} showToast={showToast} searchQuery={searchQuery}/>}
+              {activeTab==='inventory'    &&<InventoryView showToast={showToast} />}
               {activeTab==='ai-knowledge' &&<AIKnowledgeView showToast={showToast} searchQuery={searchQuery}/>}
               {activeTab==='chats'        &&<ChatsView showToast={showToast} searchQuery={searchQuery}/>}
               {activeTab==='orders'       &&<OrdersView orders={orders} delivered={delivered} onUpdateOrderStatus={handleUpdateOrderStatus} onDeleteOrder={handleDeleteOrder} onEditOrder={handleEditOrder} simulatingOrders={simulatingOrders} setSimulatingOrders={setSimulatingOrders} showToast={showToast} searchQuery={searchQuery}/>}
